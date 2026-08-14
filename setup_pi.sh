@@ -1,25 +1,35 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
 echo "=== Sports Score Display Pi Setup ==="
 
 echo "Updating system packages..."
-sudo apt update -y
+sudo apt-get update
 
-echo "Installing required system packages..."
-sudo apt install -y python3 python3-venv git
+echo "Installing Python and HZeller build dependencies..."
+sudo apt-get install -y \
+  build-essential \
+  cmake \
+  cython3 \
+  fonts-dejavu-core \
+  git \
+  python-dev-is-python3 \
+  python3-dev \
+  python3-pil \
+  python3-venv
 
 echo "Creating Python virtual environment..."
-python3 -m venv venv
+python3 -m venv .venv
+source .venv/bin/activate
 
-echo "Activating virtual environment..."
-source venv/bin/activate
+echo "Installing application dependencies..."
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
-echo "Upgrading pip inside virtual environment..."
-pip install --upgrade pip
+echo "Installing HZeller's current Python bindings..."
+python -m pip install "git+https://github.com/hzeller/rpi-rgb-led-matrix"
 
-echo "Installing Python dependencies..."
-pip install -r requirements.txt
-
-echo "Setup complete!"
-echo "To activate the environment in the future, run:"
-echo "source venv/bin/activate"
+echo "Setup complete."
+echo "1. Edit config.json for your panel and wiring."
+echo "2. Change output to matrix, or pass --output matrix."
+echo "3. Run: sudo .venv/bin/python main.py --output matrix"

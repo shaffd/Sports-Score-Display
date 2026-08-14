@@ -1,0 +1,1 @@
+Name NFL logo files with the team's uppercase abbreviation, for example DET.png.
