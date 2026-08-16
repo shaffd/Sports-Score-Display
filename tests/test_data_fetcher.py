@@ -51,6 +51,9 @@ class DataFetcherTests(unittest.TestCase):
                 "linescore": {
                     "currentInning": 6,
                     "inningState": "Top",
+                    "balls": 2,
+                    "strikes": 1,
+                    "outs": 1,
                     "offense": {"first": {"id": 1}, "third": {"id": 2}},
                     "teams": {"away": {"runs": 4}, "home": {"runs": 2}},
                 },
@@ -73,6 +76,7 @@ class DataFetcherTests(unittest.TestCase):
         self.assertEqual(game.home_score, 2)
         self.assertEqual(game.pitcher, "Pitcher")
         self.assertEqual(game.batter, "Batter")
+        self.assertEqual((game.balls, game.strikes, game.outs), (2, 1, 1))
         self.assertEqual(
             game.bases, {"first": True, "second": False, "third": True}
         )
@@ -109,7 +113,11 @@ class DataFetcherTests(unittest.TestCase):
                         "displayClock": "4:21",
                         "type": {"state": "in", "description": "In Progress"},
                     },
-                    "situation": {"possession": "8"},
+                    "situation": {
+                        "possession": "8",
+                        "shortDownDistanceText": "3rd & 4",
+                        "possessionText": "DET 42",
+                    },
                 }
             ],
         }
@@ -121,6 +129,8 @@ class DataFetcherTests(unittest.TestCase):
         self.assertEqual(game.possession, "away")
         self.assertEqual(game.period, 3)
         self.assertEqual(game.clock, "4:21")
+        self.assertEqual(game.down_distance, "3rd & 4")
+        self.assertEqual(game.field_position, "DET 42")
 
     def test_nhl_parser_uses_current_score_and_period(self):
         raw = {

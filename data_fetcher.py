@@ -189,7 +189,8 @@ class DataFetcher:
 
         away = cls._nfl_team(away_raw.get("team", {}))
         home = cls._nfl_team(home_raw.get("team", {}))
-        possession_id = str(competition.get("situation", {}).get("possession", ""))
+        situation = competition.get("situation") or {}
+        possession_id = str(situation.get("possession", ""))
         away_id = str(away_raw.get("team", {}).get("id", ""))
         home_id = str(home_raw.get("team", {}).get("id", ""))
         possession = None
@@ -211,6 +212,12 @@ class DataFetcher:
             period=int(period) if period not in (None, "") else None,
             clock=status_raw.get("displayClock") or None,
             possession=possession,
+            down_distance=(
+                situation.get("shortDownDistanceText")
+                or situation.get("downDistanceText")
+                or None
+            ),
+            field_position=situation.get("possessionText") or None,
         )
 
     @staticmethod
@@ -328,6 +335,9 @@ class DataFetcher:
             "second": bool(offense.get("second")),
             "third": bool(offense.get("third")),
         }
+        game.balls = cls._score(linescore.get("balls"))
+        game.strikes = cls._score(linescore.get("strikes"))
+        game.outs = cls._score(linescore.get("outs"))
 
     @classmethod
     def apply_mlb_live_details(cls, game: Game, payload: dict[str, Any]) -> None:

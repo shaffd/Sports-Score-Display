@@ -37,6 +37,8 @@ class Game:
     period: int | None = None
     clock: str | None = None
     possession: Literal["away", "home"] | None = None
+    down_distance: str | None = None
+    field_position: str | None = None
 
     # MLB live fields
     inning: int | None = None
@@ -46,6 +48,9 @@ class Game:
     )
     pitcher: str | None = None
     batter: str | None = None
+    balls: int | None = None
+    strikes: int | None = None
+    outs: int | None = None
 
     @property
     def marker(self) -> Literal["away", "home"] | None:

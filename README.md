@@ -38,7 +38,7 @@ Important files:
 - `models.py`: shared `Team`, `Game`, and `DisplayCard` dataclasses.
 - `data_fetcher.py`: league API clients and normalization.
 - `display_utils.py`: 24-hour/current-day selection and status text.
-- `renderer.py`: resolution-independent Pillow layout.
+- `renderer.py`: integer-region, pixel-sharp Pillow layout.
 - `outputs.py`: optional preview and physical matrix adapters.
 - `main.py`: refresh and card-rotation loop.
 
@@ -55,6 +55,8 @@ python main.py
 
 Tkinter is required only for `output: "preview"`. It is deliberately imported
 only when preview mode starts, so it is not required by a headless matrix setup.
+The preview enlarges the logical frame with nearest-neighbor scaling, so every
+64x32 source pixel appears as a sharp square instead of being smoothed.
 
 ## Raspberry Pi Zero 2 W and HZeller
 
@@ -131,9 +133,28 @@ Logos/NFL/DET.png
 Logos/NHL/NYR.png
 ```
 
-The renderer places the away logo with its left third outside the canvas. The
-home logo is placed symmetrically with its right third outside the canvas. If a
-PNG is missing, the team abbreviation is shown instead.
+The renderer trims transparent source padding, scales with nearest-neighbor
+sampling, and converts logo alpha to fully transparent or fully opaque pixels.
+It places the away logo with its left third outside the canvas and the home logo
+symmetrically with its right third outside the canvas. If a PNG is missing, the
+team abbreviation is shown instead.
+
+## 64x32 pixel layout
+
+The renderer treats the physical matrix as the source canvas; it does not draw a
+large antialiased frame and shrink it afterward. Text uses a built-in 3x5 bitmap
+alphabet by default. A configured TrueType font is still accepted, but its mask
+is thresholded before compositing so edge LEDs remain fully on or off.
+
+The main physical-panel tuning constants are near the top of `renderer.py`:
+
+- `HEADER_ROWS`: height of the centered game-status region.
+- `LIVE_FOOTER_ROWS`: height reserved for compact NFL/MLB live information.
+- `LOGO_MAX_WIDTH`: maximum pre-crop logo width at 64 columns.
+- `LOGO_OUTER_CROP_*`: how much of each logo extends beyond its outside edge.
+- `SCORE_SLOT_WIDTH`, `SCORE_CENTER_OFFSET`, and `SCORE_MAX_HEIGHT`: score anchors.
+- `LOGO_ALPHA_THRESHOLD`: cutoff between transparent and fully opaque logo pixels.
+- `TEXT_MASK_THRESHOLD`: cutoff used only when a custom TrueType font is configured.
 
 ## MLB data fix
 
