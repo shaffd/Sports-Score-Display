@@ -14,18 +14,18 @@ from models import DisplayCard, Game
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
+TEAM_LABEL_COLOR = (255, 196, 0)
 
 # These values are deliberately expressed against the physical 64x32 panel.
 # The layout scales them for larger canvases while keeping all coordinates integral.
 REFERENCE_WIDTH = 64
 REFERENCE_HEIGHT = 32
 HEADER_ROWS = 7
-LIVE_FOOTER_ROWS = 6
 LOGO_MAX_WIDTH = 36
-LOGO_OUTER_CROP_NUMERATOR = 1
-LOGO_OUTER_CROP_DENOMINATOR = 3
+LOGO_CENTER_GAP = 12
+MAX_LOGO_OUTER_CROP_DENOMINATOR = 3
 SCORE_SLOT_WIDTH = 15
-SCORE_CENTER_OFFSET = 9
+SCORE_CENTER_OFFSET = 11
 SCORE_MAX_HEIGHT = 10
 LOGO_ALPHA_THRESHOLD = 128
 TEXT_MASK_THRESHOLD = 128
@@ -63,7 +63,6 @@ class FrameLayout:
     header: Region
     logos: Region
     scores: Region
-    footer: Region | None
     logo_max_width: int
 
 
@@ -164,26 +163,16 @@ class ScoreRenderer:
         )
 
     def _layout_for(self, game: Game) -> FrameLayout:
+        del game
         header_height = min(self.height, self._scaled_rows(HEADER_ROWS))
         header = Region(0, 0, self.width, header_height)
         logos = Region(0, header.bottom, self.width, self.height)
-
-        has_footer = game.status == "live" and (
-            game.sport == "MLB" or game.sport == "NFL"
-        )
-        footer = None
-        score_bottom = self.height
-        if has_footer:
-            footer_height = min(logos.height, self._scaled_rows(LIVE_FOOTER_ROWS))
-            footer = Region(0, self.height - footer_height, self.width, self.height)
-            score_bottom = footer.top
-
-        scores = Region(0, header.bottom, self.width, max(header.bottom, score_bottom))
+        scores = logos
         logo_max_width = max(
             1,
             (self.width * LOGO_MAX_WIDTH + REFERENCE_WIDTH // 2) // REFERENCE_WIDTH,
         )
-        return FrameLayout(header, logos, scores, footer, logo_max_width)
+        return FrameLayout(header, logos, scores, logo_max_width)
 
     def _render_title(self, draw: ImageDraw.ImageDraw, title: str) -> None:
         text = title.upper()
@@ -203,13 +192,22 @@ class ScoreRenderer:
         game: Game,
     ) -> None:
         layout = self._layout_for(game)
-        status = self._header_status(game)
-        status_font = self._fitted_font(
-            status,
-            max_width=max(1, layout.header.width - 2),
-            preferred_size=layout.header.height,
-            max_height=layout.header.height,
+
+        # Size each mark independently, then make room between the two visible
+        # marks.  The only allowed crop is on the panel's outside edges.
+        away_logo = self._load_logo(
+            game.sport,
+            game.away.abbreviation,
+            layout.logo_max_width,
+            layout.logos.height,
         )
+        home_logo = self._load_logo(
+            game.sport,
+            game.home.abbreviation,
+            layout.logo_max_width,
+            layout.logos.height,
+        )
+        away_crop, home_crop = self._paired_logo_outer_crops(away_logo, home_logo)
 
         self._draw_team_logo(
             image,
@@ -219,6 +217,8 @@ class ScoreRenderer:
             "away",
             layout.logos,
             layout.logo_max_width,
+            logo=away_logo,
+            outer_crop=away_crop,
         )
         self._draw_team_logo(
             image,
@@ -228,19 +228,31 @@ class ScoreRenderer:
             "home",
             layout.logos,
             layout.logo_max_width,
+            logo=home_logo,
+            outer_crop=home_crop,
         )
 
-        # Text is drawn last and receives only a tight one-pixel black backplate.
-        self._draw_text_in_region(draw, status, layout.header, status_font)
+        if game.status == "live" and game.sport == "MLB":
+            self._draw_bases(draw, *self._mlb_bases_center(layout), game.bases)
 
         if game.status in {"live", "final"}:
             self._draw_scores(draw, game, layout.scores)
+            separator_font = self._font(max(5, self.height // 6))
+            self._draw_text_at_center(
+                draw,
+                "-",
+                (
+                    self.width // 2,
+                    layout.scores.top + layout.scores.height // 2,
+                ),
+                separator_font,
+                backplate=True,
+            )
+        elif game.status == "scheduled":
+            self._draw_upcoming_marker(draw, layout.scores)
 
-        if game.status == "live" and layout.footer is not None:
-            if game.sport == "NFL":
-                self._draw_nfl_details(draw, game, layout.footer)
-            elif game.sport == "MLB":
-                self._draw_mlb_details(draw, game, layout.footer)
+        # The header is always drawn last and never overlaps the logo region.
+        self._draw_game_header(draw, game, layout.header)
 
     def _header_status(self, game: Game) -> str:
         if game.status != "live":
@@ -268,22 +280,18 @@ class ScoreRenderer:
         side: str,
         region: Region,
         max_width: int,
+        *,
+        logo: Image.Image | None = None,
+        outer_crop: int = 0,
     ) -> tuple[int, int, int, int]:
-        logo = self._load_logo(sport, abbreviation, max_width, region.height)
+        if logo is None:
+            logo = self._load_logo(sport, abbreviation, max_width, region.height)
         if logo is not None:
             logo_width, logo_height = logo.size
-            offscreen = max(
-                1,
-                (
-                    logo_width * LOGO_OUTER_CROP_NUMERATOR
-                    + LOGO_OUTER_CROP_DENOMINATOR // 2
-                )
-                // LOGO_OUTER_CROP_DENOMINATOR,
-            )
             if side == "away":
-                x = -offscreen
+                x = -max(0, outer_crop)
             else:
-                x = self.width - (logo_width - offscreen)
+                x = self.width - logo_width + max(0, outer_crop)
             y = region.top + (region.height - logo_height) // 2
             image.paste(logo, (x, y), logo.getchannel("A"))
             return (x, y, x + logo_width, y + logo_height)
@@ -299,11 +307,51 @@ class ScoreRenderer:
         text_width, text_height = self._text_size(draw, label, font)
         y = region.top + (region.height - text_height) // 2
         if side == "away":
-            x = -1
+            x = 0
         else:
-            x = self.width - text_width + 1
+            x = self.width - text_width
         self._draw_readable_text(draw, (x, y), label, font)
         return (x, y, x + text_width, y + text_height)
+
+    def _paired_logo_outer_crops(
+        self,
+        away_logo: Image.Image | None,
+        home_logo: Image.Image | None,
+    ) -> tuple[int, int]:
+        """Return outside-edge crops which reserve an intentional center gap."""
+        if away_logo is None or home_logo is None:
+            return (0, 0)
+
+        away_width = away_logo.width
+        home_width = home_logo.width
+        center_gap = min(
+            self.width,
+            max(1, (self.width * LOGO_CENTER_GAP) // REFERENCE_WIDTH),
+        )
+        overflow = max(0, away_width + home_width - (self.width - center_gap))
+        if not overflow:
+            return (0, 0)
+
+        maximum_away_crop = away_width // MAX_LOGO_OUTER_CROP_DENOMINATOR
+        maximum_home_crop = home_width // MAX_LOGO_OUTER_CROP_DENOMINATOR
+        total_width = away_width + home_width
+        away_crop = min(
+            maximum_away_crop,
+            (overflow * away_width + total_width // 2) // total_width,
+        )
+        home_crop = min(maximum_home_crop, overflow - away_crop)
+
+        # A rounding or per-logo crop limit can leave a few columns unassigned.
+        # Allocate those columns where capacity remains before reducing the gap.
+        remaining = overflow - away_crop - home_crop
+        if remaining:
+            extra_away = min(remaining, maximum_away_crop - away_crop)
+            away_crop += extra_away
+            remaining -= extra_away
+        if remaining:
+            home_crop += min(remaining, maximum_home_crop - home_crop)
+
+        return (away_crop, home_crop)
 
     def _draw_scores(
         self,
@@ -319,8 +367,7 @@ class ScoreRenderer:
             5,
             (self.width * SCORE_CENTER_OFFSET) // REFERENCE_WIDTH,
         )
-        away_center = self.width // 2 - center_offset
-        home_center = self.width // 2 + center_offset
+        away_center, home_center = self._score_centers(center_offset)
         score_max_height = max(
             5,
             (self.height * SCORE_MAX_HEIGHT) // REFERENCE_HEIGHT,
@@ -350,96 +397,185 @@ class ScoreRenderer:
         marker = game.marker
         radius = max(1, self.height // 32)
         if marker == "away":
-            dot_x = min(self.width - radius - 1, away_box[2] + radius + 1)
+            dot_x = max(radius, away_box[0] - radius - 1)
             dot_y = (away_box[1] + away_box[3]) // 2
+            draw.rectangle(
+                (
+                    dot_x - radius - 1,
+                    dot_y - radius - 1,
+                    dot_x + radius + 1,
+                    dot_y + radius + 1,
+                ),
+                fill=BLACK,
+            )
             draw.ellipse(
                 (dot_x - radius, dot_y - radius, dot_x + radius, dot_y + radius),
                 fill=WHITE,
             )
         elif marker == "home":
-            dot_x = max(radius, home_box[0] - radius - 1)
+            dot_x = min(self.width - radius - 1, home_box[2] + radius + 1)
             dot_y = (home_box[1] + home_box[3]) // 2
+            draw.rectangle(
+                (
+                    dot_x - radius - 1,
+                    dot_y - radius - 1,
+                    dot_x + radius + 1,
+                    dot_y + radius + 1,
+                ),
+                fill=BLACK,
+            )
             draw.ellipse(
                 (dot_x - radius, dot_y - radius, dot_x + radius, dot_y + radius),
                 fill=WHITE,
             )
+
+    def _score_centers(self, center_offset: int | None = None) -> tuple[int, int]:
+        """Use one score geometry for every sport, including football."""
+        if center_offset is None:
+            center_offset = max(
+                5,
+                (self.width * SCORE_CENTER_OFFSET) // REFERENCE_WIDTH,
+            )
+        return (self.width // 2 - center_offset, self.width // 2 + center_offset)
 
     @staticmethod
     def _period_clock(prefix: str, period: int | None, clock: str | None) -> str:
         period_text = f"{prefix}{period}" if period is not None else prefix
         return " ".join(part for part in (period_text, clock or "") if part).upper()
 
-    def _draw_nfl_details(
+    def _draw_game_header(
         self,
         draw: ImageDraw.ImageDraw,
         game: Game,
         region: Region,
     ) -> None:
-        possession_team = None
-        if game.possession == "away":
-            possession_team = game.away.abbreviation
-        elif game.possession == "home":
-            possession_team = game.home.abbreviation
+        label_font = self._font(max(5, self._scaled_rows(5)))
+        away_label = self._rasterize_text("A", label_font)
+        home_label = self._rasterize_text("H", label_font)
+        label_y = region.top + (region.height - away_label.height) // 2
+        self._draw_mask(
+            draw,
+            (region.left + 1, label_y),
+            away_label,
+            fill=TEAM_LABEL_COLOR,
+        )
+        self._draw_mask(
+            draw,
+            (region.right - home_label.width - 1, label_y),
+            home_label,
+            fill=TEAM_LABEL_COLOR,
+        )
 
-        down_distance = (game.down_distance or "").upper().replace(" ", "")
-        field_position = (game.field_position or "").upper().replace(" ", "")
-        parts = [part for part in (possession_team, down_distance, field_position) if part]
-        detail = " ".join(parts)
-        if possession_team and len(parts) == 1:
-            detail = f"POSS {possession_team}"
-        if not detail:
+        label_inset = max(5, (self.width * 5) // REFERENCE_WIDTH)
+        content_region = Region(
+            region.left + label_inset,
+            region.top,
+            region.right - label_inset,
+            region.bottom,
+        )
+        if game.status == "live" and game.sport == "MLB":
+            self._draw_mlb_header(draw, game, content_region)
             return
 
-        font = self._fitted_font(detail, max(1, region.width - 2), region.height, region.height)
-        detail = self._trim_to_width(draw, detail, font, max(1, region.width - 2))
-        self._draw_text_in_region(draw, detail, region, font, backplate=True)
+        if game.status == "live" and game.sport == "NFL":
+            status = self._nfl_header_text(game)
+        else:
+            status = self._header_status(game)
+        font = self._fitted_font(
+            status,
+            max_width=content_region.width,
+            preferred_size=content_region.height,
+            max_height=content_region.height,
+        )
+        status = self._trim_to_width(draw, status, font, content_region.width)
+        self._draw_text_in_region(draw, status, content_region, font)
 
-    def _draw_mlb_details(
+    def _nfl_header_text(self, game: Game) -> str:
+        clock = (game.clock or "").upper()
+        if clock.startswith("0"):
+            clock = clock[1:]
+        status = self._period_clock("Q", game.period, clock)
+
+        down_distance = (game.down_distance or "").upper().replace(" ", "")
+        for ordinal in ("ST", "ND", "RD", "TH"):
+            down_distance = down_distance.replace(ordinal, "")
+
+        compact_field = (game.field_position or "").upper().replace(" ", "")
+        letters = "".join(character for character in compact_field if character.isalpha())
+        digits = "".join(character for character in compact_field if character.isdigit())
+        if len(letters) > 1 and digits:
+            compact_field = letters[0] + digits
+
+        return " ".join(
+            part for part in (status, down_distance, compact_field) if part
+        )
+
+    def _draw_mlb_header(
         self,
         draw: ImageDraw.ImageDraw,
         game: Game,
         region: Region,
     ) -> None:
-        counts = []
-        if game.balls is not None:
-            counts.append(f"B{game.balls}")
-        if game.strikes is not None:
-            counts.append(f"S{game.strikes}")
-        if game.outs is not None:
-            counts.append(f"O{game.outs}")
-
-        bases_width = max(9, (self.width * 10) // REFERENCE_WIDTH)
-        if counts:
-            count_region = Region(
-                region.left + 1,
-                region.top,
-                region.right - bases_width - 1,
-                region.bottom,
-            )
-            count_text = " ".join(counts)
-            font = self._fitted_font(count_text, count_region.width, region.height, region.height)
-            self._draw_text_in_region(draw, count_text, count_region, font, backplate=True)
-            bases_center_x = region.right - bases_width // 2 - 1
-        else:
-            bases_center_x = region.left + region.width // 2
-
-        radius = max(1, self.height // 32)
-        gap = radius * 3
-        draw.rectangle(
-            (
-                bases_center_x - gap - radius - 1,
-                region.top,
-                bases_center_x + gap + radius + 1,
-                region.bottom - 1,
-            ),
-            fill=BLACK,
+        inning = self._header_status(game)
+        balls = f"B{game.balls}" if game.balls is not None else ""
+        strikes = f"S{game.strikes}" if game.strikes is not None else ""
+        outs = f"O{game.outs}" if game.outs is not None else ""
+        status = " ".join(
+            part for part in (inning, balls, strikes, outs) if part
         )
-        self._draw_bases(
+        font = self._fitted_font(
+            status,
+            max_width=region.width,
+            preferred_size=region.height,
+            max_height=region.height,
+        )
+        # Keep the order stable while centering the complete status as one unit.
+        self._draw_text_in_region(draw, status, region, font)
+
+    def _mlb_bases_center(self, layout: FrameLayout) -> tuple[int, int]:
+        """Put the diamond below the header but above the score baseline."""
+        offset = max(self._scaled_rows(4), layout.logos.height // 6)
+        return (self.width // 2, min(layout.logos.bottom - 1, layout.logos.top + offset))
+
+    def _draw_upcoming_marker(
+        self,
+        draw: ImageDraw.ImageDraw,
+        region: Region,
+    ) -> None:
+        pattern = (
+            "0111110",
+            "1000001",
+            "1011101",
+            "1010101",
+            "1011111",
+            "1000000",
+            "0111110",
+        )
+        scale = max(1, self.height // REFERENCE_HEIGHT)
+        mask = self._pattern_mask(pattern, scale)
+        self._draw_mask(
             draw,
-            bases_center_x,
-            region.top + region.height // 2,
-            game.bases,
+            region.centered_origin(mask.size),
+            mask,
+            backplate=True,
         )
+
+    @staticmethod
+    def _pattern_mask(pattern: tuple[str, ...], scale: int = 1) -> Image.Image:
+        width = len(pattern[0]) * scale
+        height = len(pattern) * scale
+        mask = Image.new("1", (width, height))
+        mask_draw = ImageDraw.Draw(mask)
+        for row, bits in enumerate(pattern):
+            for column, bit in enumerate(bits):
+                if bit == "1":
+                    x = column * scale
+                    y = row * scale
+                    mask_draw.rectangle(
+                        (x, y, x + scale - 1, y + scale - 1),
+                        fill=1,
+                    )
+        return mask
 
     def _draw_bases(
         self,
@@ -606,9 +742,17 @@ class ScoreRenderer:
         region: Region,
         font,
         backplate: bool = False,
+        horizontal: str = "center",
     ) -> tuple[int, int, int, int]:
         mask = self._rasterize_text(text, font)
-        xy = region.centered_origin(mask.size)
+        x, y = region.centered_origin(mask.size)
+        if horizontal == "left":
+            x = region.left
+        elif horizontal == "right":
+            x = region.right - mask.width
+        elif horizontal != "center":
+            raise ValueError("horizontal must be 'left', 'center', or 'right'")
+        xy = (x, y)
         return self._draw_mask(draw, xy, mask, backplate=backplate)
 
     def _draw_text_at_center(
