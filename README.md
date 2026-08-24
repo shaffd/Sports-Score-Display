@@ -4,6 +4,9 @@ A configurable Python scoreboard for NHL, NFL, and MLB games. The application
 fetches recent and upcoming games, renders small Pillow images, and sends those
 images either to a Tkinter development preview or an HZeller HUB75 LED matrix.
 
+The `codex/camp-dovid` branch also adds temporary Camp Dovid JR tournament
+standings, upcoming games, and recent results from GameSheet Stats.
+
 ## What it displays
 
 - Games whose scheduled start was within the previous 24 hours.
@@ -33,6 +36,8 @@ Sports APIs -> data_fetcher.py -> normalized Game objects
             -> display_utils.py -> rotating DisplayCard list
             -> renderer.py      -> Pillow RGB frame
             -> outputs.py       -> Tkinter preview or HZeller rgbmatrix
+
+GameSheet JSON -> camp_dovid.py -> cached JR tournament cards --^
 ```
 
 Important files:
@@ -125,6 +130,44 @@ used in another sport cannot accidentally receive the longer dwell. The live
 favorite card is re-rendered after every data refresh while its three-minute
 dwell remains active, keeping NHL and NFL clocks and scores current in both
 preview and matrix output modes.
+
+## Camp Dovid excursion
+
+This section applies only to the persistent `codex/camp-dovid` branch. The
+Camp Dovid implementation is never merged into `main`; return to the enduring
+scoreboard with `git switch main` after camp.
+
+The branch reads the public GameSheet JSON data behind season `15433` and JR
+division `83615`. Camp data is cached independently for 30 minutes, while the
+existing NHL, NFL, and MLB refresh interval remains 30 seconds. A GameSheet
+failure is isolated and does not interrupt the regular sports cards.
+
+The 64x32 rotation contains:
+
+- A `CAMP DOVID` header.
+- Ranked JR standings, four teams per page.
+- One readable card per upcoming JR game.
+- One readable card per recent final result.
+- No tournament logos. Team names receive deterministic, bright colors, so a
+  team always has the same color on standings, schedule, and result cards.
+
+```json
+"camp_dovid": {
+  "enabled": true,
+  "season_id": 15433,
+  "division_id": 83615,
+  "division_name": "JR",
+  "refresh_seconds": 1800,
+  "active_through": "2026-08-27",
+  "upcoming_games": 4,
+  "recent_results": 4,
+  "api_base_url": "https://gamesheetstats.com/api"
+}
+```
+
+Cards stop automatically after `active_through`. For next year's camp, merge
+the latest `main` into `codex/camp-dovid`, then update the season ID, division
+ID, and date in this branch's `config.json`.
 
 ## Team logos
 

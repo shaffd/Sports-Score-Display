@@ -12,6 +12,17 @@
   "api_timeout_seconds": 10,
   "sports": ["NHL", "NFL", "MLB"],
   "show_sport_headers": true,
+  "camp_dovid": {
+    "enabled": true,
+    "season_id": 15433,
+    "division_id": 83615,
+    "division_name": "JR",
+    "refresh_seconds": 1800,
+    "active_through": "2026-08-27",
+    "upcoming_games": 4,
+    "recent_results": 4,
+    "api_base_url": "https://gamesheetstats.com/api"
+  },
   "output": "preview",
   "preview_scale": 8,
   "canvas": {

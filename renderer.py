@@ -9,7 +9,7 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 
 from display_utils import format_status
-from models import DisplayCard, Game
+from models import DisplayCard, Game, RichTextCard, RichTextLine, RichTextSpan
 
 
 WHITE = (255, 255, 255)
@@ -151,6 +151,8 @@ class ScoreRenderer:
 
         if card.type in {"header", "message"}:
             self._render_title(draw, card.title)
+        elif card.type == "rich_text" and card.rich_text is not None:
+            self._render_rich_text_card(draw, card.rich_text)
         elif card.game is not None:
             self._render_game(image, draw, card.game)
         return image
@@ -184,6 +186,118 @@ class ScoreRenderer:
             max_height=max(1, self.height - 2),
         )
         self._draw_text_in_region(draw, text, region, font)
+
+    def _render_rich_text_card(
+        self,
+        draw: ImageDraw.ImageDraw,
+        card: RichTextCard,
+    ) -> None:
+        """Render a compact title and up to four independently colored lines."""
+        horizontal_inset = max(1, self.width // REFERENCE_WIDTH)
+        title_bottom = min(self.height, self._scaled_rows(6))
+        title_region = Region(
+            horizontal_inset,
+            0,
+            self.width - horizontal_inset,
+            title_bottom,
+        )
+        title = card.title.upper()
+        title_font = self._fitted_font(
+            title,
+            max_width=title_region.width,
+            preferred_size=max(5, self._scaled_rows(5)),
+            max_height=title_region.height,
+        )
+        title_mask = self._rasterize_text(title, title_font)
+        self._draw_mask(
+            draw,
+            title_region.centered_origin(title_mask.size),
+            title_mask,
+            fill=card.title_color,
+        )
+
+        divider_y = min(self.height - 1, self._scaled_rows(6))
+        draw.line(
+            (
+                horizontal_inset,
+                divider_y,
+                self.width - horizontal_inset - 1,
+                divider_y,
+            ),
+            fill=card.title_color,
+        )
+
+        lines = card.lines[:4]
+        if not lines:
+            return
+        body_top = min(self.height, self._scaled_rows(8))
+        body_height = max(0, self.height - body_top)
+        for index, line in enumerate(lines):
+            region = Region(
+                horizontal_inset,
+                body_top + body_height * index // len(lines),
+                self.width - horizontal_inset,
+                body_top + body_height * (index + 1) // len(lines),
+            )
+            self._draw_rich_text_line(draw, line, region)
+
+    def _draw_rich_text_line(
+        self,
+        draw: ImageDraw.ImageDraw,
+        line: RichTextLine,
+        region: Region,
+    ) -> None:
+        preferred_size = min(region.height, max(5, self._scaled_rows(5)))
+        font = self._font(preferred_size)
+        gap = max(1, self.width // REFERENCE_WIDTH)
+        spans = self._fit_rich_text_spans(line.spans, font, region.width, gap)
+        masks = [self._rasterize_text(span.text, font) for span in spans]
+        width = sum(mask.width for mask in masks) + gap * max(0, len(masks) - 1)
+        if line.alignment == "left":
+            x = region.left
+        elif line.alignment == "right":
+            x = region.right - width
+        else:
+            x = region.left + (region.width - width) // 2
+
+        for span, mask in zip(spans, masks):
+            y = region.top + (region.height - mask.height) // 2
+            self._draw_mask(draw, (x, y), mask, fill=span.color)
+            x += mask.width + gap
+
+    def _fit_rich_text_spans(
+        self,
+        spans: tuple[RichTextSpan, ...],
+        font,
+        max_width: int,
+        gap: int,
+    ) -> list[RichTextSpan]:
+        fitted = [
+            RichTextSpan(span.text.strip(), span.color, span.shrink)
+            for span in spans
+            if span.text.strip()
+        ]
+
+        def line_width() -> int:
+            return sum(
+                self._text_size(None, span.text, font)[0] for span in fitted
+            ) + gap * max(0, len(fitted) - 1)
+
+        while line_width() > max_width:
+            candidates = [
+                index
+                for index, span in enumerate(fitted)
+                if span.shrink and len(span.text.rstrip(".")) > 1
+            ]
+            if not candidates:
+                break
+            index = max(candidates, key=lambda item: len(fitted[item].text))
+            span = fitted[index]
+            shortened = span.text.rstrip(".")[:-1].rstrip()
+            if len(shortened) > 1:
+                shortened += "."
+            fitted[index] = RichTextSpan(shortened, span.color, span.shrink)
+        return fitted
 
     def _render_game(
         self,

@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
 
-from config import AppConfig
+from camp_dovid import CampSnapshot, CampStanding
+from config import AppConfig, CampDovidConfig
 from main import ScoreDisplayApp
 from models import FetchBatch, Game, Team
 
@@ -42,6 +43,14 @@ class _Fetcher:
         return FetchBatch(games=self.games)
 
 
+class _CampFetcher:
+    def __init__(self, snapshot):
+        self.snapshot = snapshot
+
+    def fetch(self, *_args):
+        return self.snapshot
+
+
 def _live_game(game_id, away):
     return Game(
         sport="MLB",
@@ -54,6 +63,30 @@ def _live_game(game_id, away):
 
 
 class ScoreDisplayAppTests(unittest.TestCase):
+    def test_refresh_replaces_no_games_message_with_camp_cards(self):
+        app = ScoreDisplayApp.__new__(ScoreDisplayApp)
+        app.config = AppConfig(
+            sports=("MLB",),
+            show_sport_headers=False,
+            camp_dovid=CampDovidConfig(enabled=True),
+        )
+        app.fetcher = _Fetcher([])
+        app.camp_dovid_fetcher = _CampFetcher(
+            CampSnapshot(
+                standings=(CampStanding(1, "Spartans", 2, 2, 0, 0, 4),)
+            )
+        )
+        app.cards = []
+        app.index = 0
+
+        app.refresh()
+
+        self.assertNotIn("message:NO GAMES", [card.key for card in app.cards])
+        self.assertEqual(
+            [card.key for card in app.cards],
+            ["header:CAMP DOVID", "rich_text:camp-standings-1"],
+        )
+
     def test_favorite_dwell_survives_refreshes_before_normal_rotation_resumes(self):
         clock = _Clock()
         app = ScoreDisplayApp.__new__(ScoreDisplayApp)

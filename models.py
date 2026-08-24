@@ -8,7 +8,36 @@ from typing import Literal
 
 
 GameStatus = Literal["scheduled", "live", "final"]
-CardType = Literal["header", "game", "message"]
+CardType = Literal["header", "game", "message", "rich_text"]
+TextAlignment = Literal["left", "center", "right"]
+TextColor = tuple[int, int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class RichTextSpan:
+    """A colored portion of one compact list-card line."""
+
+    text: str
+    color: TextColor = (255, 255, 255)
+    shrink: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class RichTextLine:
+    """One line on a list-style card, composed of independently colored spans."""
+
+    spans: tuple[RichTextSpan, ...]
+    alignment: TextAlignment = "center"
+
+
+@dataclass(frozen=True, slots=True)
+class RichTextCard:
+    """Pixel-display content for standings, schedules, and other compact lists."""
+
+    card_id: str
+    title: str
+    lines: tuple[RichTextLine, ...]
+    title_color: TextColor = (102, 153, 204)
 
 
 @dataclass(slots=True)
@@ -70,11 +99,14 @@ class DisplayCard:
     type: CardType
     title: str = ""
     game: Game | None = None
+    rich_text: RichTextCard | None = None
 
     @property
     def key(self) -> str:
         if self.game:
             return f"{self.game.sport}:{self.game.game_id}"
+        if self.rich_text:
+            return f"rich_text:{self.rich_text.card_id}"
         return f"{self.type}:{self.title}"
 
 

@@ -16,6 +16,11 @@ class ConfigTests(unittest.TestCase):
             set(config.favorite_teams),
             {("MLB", "NYY"), ("NHL", "NYR"), ("NFL", "DET")},
         )
+        self.assertTrue(config.camp_dovid.enabled)
+        self.assertEqual(config.camp_dovid.season_id, 15433)
+        self.assertEqual(config.camp_dovid.division_id, 83615)
+        self.assertEqual(config.camp_dovid.refresh_seconds, 1800)
+        self.assertEqual(config.camp_dovid.active_through.isoformat(), "2026-08-27")
 
 
 if __name__ == "__main__":

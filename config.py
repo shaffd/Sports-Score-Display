@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -55,6 +56,21 @@ class MatrixConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class CampDovidConfig:
+    """Temporary Camp Dovid tournament data shown only on its feature branch."""
+
+    enabled: bool = False
+    season_id: int = 15433
+    division_id: int = 83615
+    division_name: str = "JR"
+    refresh_seconds: int = 1800
+    active_through: date | None = None
+    upcoming_games: int = 4
+    recent_results: int = 4
+    api_base_url: str = "https://gamesheetstats.com/api"
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     timezone: str = "America/New_York"
     lookback_hours: int = 24
@@ -70,6 +86,7 @@ class AppConfig:
     canvas: CanvasConfig = CanvasConfig()
     assets: AssetConfig = AssetConfig()
     matrix: MatrixConfig = MatrixConfig()
+    camp_dovid: CampDovidConfig = CampDovidConfig()
 
     @property
     def zone(self) -> ZoneInfo:
@@ -107,6 +124,15 @@ def _favorite_teams(value: object) -> tuple[tuple[str, str], ...]:
     return tuple(favorites)
 
 
+def _optional_date(name: str, value: object) -> date | None:
+    if value in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as exc:
+        raise ConfigError(f"{name} must use YYYY-MM-DD format") from exc
+
+
 def load_config(path: str | Path = "config.json") -> AppConfig:
     """Load an AppConfig, resolving asset paths relative to the JSON file."""
     config_path = Path(path).resolve()
@@ -121,6 +147,7 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
     canvas_raw = raw.get("canvas", {})
     assets_raw = raw.get("assets", {})
     matrix_raw = raw.get("matrix", {})
+    camp_raw = raw.get("camp_dovid", {})
 
     canvas = CanvasConfig(
         width=int(canvas_raw.get("width", 64)),
@@ -153,6 +180,21 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         show_refresh_rate=bool(matrix_raw.get("show_refresh_rate", False)),
         drop_privileges=bool(matrix_raw.get("drop_privileges", True)),
     )
+    camp_dovid = CampDovidConfig(
+        enabled=bool(camp_raw.get("enabled", False)),
+        season_id=int(camp_raw.get("season_id", 15433)),
+        division_id=int(camp_raw.get("division_id", 83615)),
+        division_name=str(camp_raw.get("division_name", "JR")).strip() or "JR",
+        refresh_seconds=int(camp_raw.get("refresh_seconds", 1800)),
+        active_through=_optional_date(
+            "camp_dovid.active_through", camp_raw.get("active_through")
+        ),
+        upcoming_games=int(camp_raw.get("upcoming_games", 4)),
+        recent_results=int(camp_raw.get("recent_results", 4)),
+        api_base_url=str(
+            camp_raw.get("api_base_url", "https://gamesheetstats.com/api")
+        ).rstrip("/"),
+    )
 
     sports = tuple(str(sport).upper() for sport in raw.get("sports", SUPPORTED_SPORTS))
     unsupported = sorted(set(sports) - set(SUPPORTED_SPORTS))
@@ -184,6 +226,7 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         canvas=canvas,
         assets=assets,
         matrix=matrix,
+        camp_dovid=camp_dovid,
     )
 
     try:
@@ -209,10 +252,17 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         ("matrix.cols", config.matrix.cols),
         ("matrix.chain_length", config.matrix.chain_length),
         ("matrix.parallel", config.matrix.parallel),
+        ("camp_dovid.season_id", config.camp_dovid.season_id),
+        ("camp_dovid.division_id", config.camp_dovid.division_id),
+        ("camp_dovid.refresh_seconds", config.camp_dovid.refresh_seconds),
+        ("camp_dovid.upcoming_games", config.camp_dovid.upcoming_games),
+        ("camp_dovid.recent_results", config.camp_dovid.recent_results),
     ):
         _positive(name, value)
 
     if not 1 <= config.matrix.brightness <= 100:
         raise ConfigError("matrix.brightness must be between 1 and 100")
+    if not config.camp_dovid.api_base_url:
+        raise ConfigError("camp_dovid.api_base_url must not be empty")
 
     return config

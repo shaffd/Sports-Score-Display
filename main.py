@@ -8,6 +8,7 @@ import time
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from camp_dovid import CampDovidFetcher, build_camp_dovid_cards
 from config import AppConfig, ConfigError, load_config
 from data_fetcher import DataFetcher
 from display_utils import build_cards, card_display_seconds, display_window
@@ -25,6 +26,11 @@ class ScoreDisplayApp:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
         self.fetcher = DataFetcher(timeout=config.api_timeout_seconds)
+        self.camp_dovid_fetcher = CampDovidFetcher(
+            config.camp_dovid,
+            config.zone,
+            timeout=config.api_timeout_seconds,
+        )
         self.output = create_output(config)
         self.renderer = ScoreRenderer(
             width=self.output.width,
@@ -51,6 +57,21 @@ class ScoreDisplayApp:
             now=now,
             had_errors=bool(batch.errors),
         )
+        if self.config.camp_dovid.enabled:
+            camp_snapshot = self.camp_dovid_fetcher.fetch(now)
+            camp_cards = build_camp_dovid_cards(
+                camp_snapshot,
+                now,
+                self.config.camp_dovid,
+                self.config.zone,
+            )
+            if camp_cards:
+                refreshed_cards = [
+                    card
+                    for card in refreshed_cards
+                    if not (card.type == "message" and card.title == "NO GAMES")
+                ]
+                refreshed_cards.extend(camp_cards)
         self.cards = refreshed_cards
 
         retained = False
