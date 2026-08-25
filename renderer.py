@@ -249,6 +249,10 @@ class ScoreRenderer:
     ) -> None:
         preferred_size = min(region.height, max(5, self._scaled_rows(5)))
         font = self._font(preferred_size)
+        if line.column_starts:
+            self._draw_rich_text_columns(draw, line, region, font)
+            return
+
         gap = max(1, self.width // REFERENCE_WIDTH)
         spans = self._fit_rich_text_spans(line.spans, font, region.width, gap)
         masks = [self._rasterize_text(span.text, font) for span in spans]
@@ -264,6 +268,44 @@ class ScoreRenderer:
             y = region.top + (region.height - mask.height) // 2
             self._draw_mask(draw, (x, y), mask, fill=span.color)
             x += mask.width + gap
+
+    def _draw_rich_text_columns(
+        self,
+        draw: ImageDraw.ImageDraw,
+        line: RichTextLine,
+        region: Region,
+        font,
+    ) -> None:
+        if len(line.column_starts) != len(line.spans):
+            raise ValueError("column_starts must contain one position per span")
+        alignments = line.column_alignments or ("left",) * len(line.spans)
+        if len(alignments) != len(line.spans):
+            raise ValueError("column_alignments must contain one value per span")
+
+        starts = [
+            region.left + self.width * start // REFERENCE_WIDTH
+            for start in line.column_starts
+        ]
+        for index, (span, alignment) in enumerate(zip(line.spans, alignments)):
+            cell = Region(
+                starts[index],
+                region.top,
+                starts[index + 1] if index + 1 < len(starts) else region.right,
+                region.bottom,
+            )
+            fitted = self._fit_rich_text_spans((span,), font, cell.width, 0)
+            if not fitted:
+                continue
+            fitted_span = fitted[0]
+            mask = self._rasterize_text(fitted_span.text, font)
+            if alignment == "right":
+                x = cell.right - mask.width
+            elif alignment == "center":
+                x = cell.left + (cell.width - mask.width) // 2
+            else:
+                x = cell.left
+            y = cell.top + (cell.height - mask.height) // 2
+            self._draw_mask(draw, (x, y), mask, fill=fitted_span.color)
 
     def _fit_rich_text_spans(
         self,

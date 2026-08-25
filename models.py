@@ -28,6 +28,10 @@ class RichTextLine:
 
     spans: tuple[RichTextSpan, ...]
     alignment: TextAlignment = "center"
+    # Optional fixed column starts, expressed in pixels on the reference 64-wide
+    # panel. Each span occupies the cell from its start to the next start.
+    column_starts: tuple[int, ...] = ()
+    column_alignments: tuple[TextAlignment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

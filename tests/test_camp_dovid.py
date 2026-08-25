@@ -38,9 +38,9 @@ class _Session:
 
     def get(self, url, params=None, timeout=None):
         self.calls.append((url, params, timeout))
-        if "getDivisionStandings" in url:
+        if "/standings/" in url:
             return _Response(self.standings)
-        if "getSeasonSchedule" in url:
+        if "/unified-games/" in url:
             return _Response(self.schedule)
         raise AssertionError(f"Unexpected URL: {url}")
 
@@ -54,54 +54,58 @@ class _Clock:
 
 
 def _standings_payload():
-    return [
-        {
-            "id": 83615,
-            "title": "JR",
-            "tableData": {
-                "teamTitles": [
-                    {"id": 1, "title": "Spartans"},
-                    {"id": 2, "title": "Michigan"},
-                    {"id": 3, "title": "Wolverines"},
-                    {"id": 4, "title": "Lions"},
-                    {"id": 5, "title": "Canadiens"},
-                ],
-                "ranks": [1, 2, 3, 4, 5],
-                "gp": [2, 2, 2, 2, 2],
-                "w": [2, 1, 1, 0, 0],
-                "l": [0, 1, 1, 2, 2],
-                "t": [0, 0, 0, 0, 0],
-                "pts": [4, 2, 2, 0, 0],
-            },
-        }
+    teams = [
+        (1, "Spartans", 2, 2, 0, 0, 4),
+        (2, "Michigan", 2, 1, 1, 0, 2),
+        (3, "Wolverines", 2, 1, 1, 0, 2),
+        (4, "Lions", 2, 0, 2, 0, 0),
+        (5, "Canadiens", 2, 0, 2, 0, 0),
     ]
+    return {
+        "status": "success",
+        "data": [
+            {
+                "divisionId": 83615,
+                "standings": [
+                    {
+                        "rank": rank,
+                        "team": {"id": rank, "title": team},
+                        "stats": {
+                            "GP": gp,
+                            "W": wins,
+                            "L": losses,
+                            "T": ties,
+                            "PTS": points,
+                        },
+                    }
+                    for rank, team, gp, wins, losses, ties, points in teams
+                ],
+            }
+        ],
+    }
 
 
 def _schedule_payload():
     return {
-        "100_0": [
+        "data": [
             {
-                "date": "Mon, Aug 24, 2026 - 2 Games",
-                "games": [
-                    {
-                        "id": "final-1",
-                        "scheduleStartTime": "2026-08-24T14:00:00-04:00",
-                        "status": "final",
-                        "location": "Rink 1",
-                        "visitorTeam": {"id": 1, "name": "Spartans", "score": 4},
-                        "homeTeam": {"id": 2, "name": "Michigan", "score": 2},
-                    },
-                    {
-                        "id": "next-1",
-                        "scheduleStartTime": "2026-08-25T10:30:00-04:00",
-                        "status": "scheduled",
-                        "location": "Rink 2",
-                        "visitorTeam": {"id": 3, "name": "Wolverines"},
-                        "homeTeam": {"id": 1, "name": "Spartans"},
-                    },
-                ],
-            }
-        ]
+                "gameId": "final-1",
+                "timeStampZulu": "2026-08-24T18:00:00Z",
+                "status": "final",
+                "location": "Rink 1",
+                "visitor": {"id": 1, "title": "Spartans", "goals": 4},
+                "home": {"id": 2, "title": "Michigan", "goals": 2},
+            },
+            {
+                "gameId": "next-1",
+                "timeStampZulu": "2026-08-25T14:30:00Z",
+                "status": "scheduled",
+                "location": "Rink 2",
+                "visitor": {"id": 3, "title": "Wolverines"},
+                "home": {"id": 1, "title": "Spartans"},
+            },
+        ],
+        "meta": {"total": 2, "filtered": 2},
     }
 
 
@@ -116,7 +120,7 @@ class CampDovidTests(unittest.TestCase):
             active_through=date(2026, 8, 27),
         )
 
-    def test_parses_parallel_standings_arrays(self):
+    def test_parses_current_standings_rows(self):
         standings = CampDovidFetcher.parse_standings(
             _standings_payload(), 83615
         )
@@ -156,6 +160,16 @@ class CampDovidTests(unittest.TestCase):
         clock.value = 1800
         fetcher.fetch(self.now + timedelta(minutes=30))
         self.assertEqual(len(session.calls), 4)
+
+        standings_url, standings_params, _ = session.calls[0]
+        games_url, games_params, _ = session.calls[1]
+        self.assertTrue(standings_url.endswith("/standings/15433"))
+        self.assertEqual(
+            standings_params, {"type": "tournament", "division": "83615"}
+        )
+        self.assertTrue(games_url.endswith("/unified-games/15433"))
+        self.assertEqual(games_params["gameType"], "tournament")
+        self.assertEqual(games_params["division"], "83615")
 
     def test_cards_page_standings_and_include_upcoming_and_results(self):
         snapshot = CampSnapshot(
@@ -206,6 +220,37 @@ class CampDovidTests(unittest.TestCase):
             if "Spartans" in span.text
         ]
         self.assertEqual(span_colors, [color, color])
+
+    def test_standings_and_finals_use_columns_but_upcoming_stays_centered(self):
+        snapshot = CampSnapshot(
+            standings=tuple(
+                CampDovidFetcher.parse_standings(_standings_payload(), 83615)
+            ),
+            games=tuple(CampDovidFetcher.parse_schedule(_schedule_payload(), ZONE)),
+        )
+        cards = build_camp_dovid_cards(snapshot, self.now, self.config, ZONE)
+        rich_cards = {
+            card.rich_text.card_id: card.rich_text
+            for card in cards
+            if card.rich_text is not None
+        }
+
+        standing_line = rich_cards["camp-standings-1"].lines[0]
+        self.assertEqual(standing_line.column_starts, (0, 8, 38))
+        self.assertEqual(
+            standing_line.column_alignments, ("left", "left", "right")
+        )
+
+        upcoming = rich_cards["camp-upcoming-next-1"]
+        self.assertTrue(all(not line.column_starts for line in upcoming.lines))
+        self.assertTrue(all(line.alignment == "center" for line in upcoming.lines))
+
+        final = rich_cards["camp-result-final-1"]
+        for team_line in final.lines[1:3]:
+            self.assertEqual(team_line.column_starts, (0, 54))
+            self.assertEqual(team_line.column_alignments, ("left", "right"))
+        self.assertEqual(final.lines[-1].alignment, "center")
+        self.assertFalse(final.lines[-1].column_starts)
 
     def test_rich_text_renderer_uses_team_colors_without_logos(self):
         snapshot = CampSnapshot(

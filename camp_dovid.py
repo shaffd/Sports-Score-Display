@@ -112,12 +112,10 @@ class CampDovidFetcher:
 
         try:
             payload = self._get_json(
-                f"useStandings/getDivisionStandings/{self.config.season_id}",
+                f"standings/{self.config.season_id}",
                 {
-                    "filter[divisions]": str(self.config.division_id),
-                    "filter[limit]": 100,
-                    "filter[offset]": 0,
-                    "filter[timeZoneOffset]": self._timezone_offset(now),
+                    "type": "tournament",
+                    "division": str(self.config.division_id),
                 },
             )
             standings = tuple(
@@ -129,13 +127,13 @@ class CampDovidFetcher:
 
         try:
             payload = self._get_json(
-                f"useSchedule/getSeasonSchedule/{self.config.season_id}",
+                f"unified-games/{self.config.season_id}",
                 {
-                    "filter[divisions]": str(self.config.division_id),
-                    "filter[gametype]": "overall",
-                    "filter[limit]": 100,
-                    "filter[offset]": 0,
-                    "filter[timeZoneOffset]": self._timezone_offset(now),
+                    "gameType": "tournament",
+                    "division": str(self.config.division_id),
+                    "order": "asc",
+                    "limit": 100,
+                    "offset": 0,
                 },
             )
             parsed_games = self.parse_schedule(payload, self.zone)
@@ -203,11 +201,6 @@ class CampDovidFetcher:
                 enriched.append(game)
         return enriched
 
-    @staticmethod
-    def _timezone_offset(now: datetime) -> int:
-        offset = now.utcoffset()
-        return int(offset.total_seconds() // 60) if offset is not None else 0
-
     @classmethod
     def parse_standings(
         cls, payload: Any, division_id: int
@@ -220,13 +213,26 @@ class CampDovidFetcher:
         for division in divisions:
             if not isinstance(division, dict):
                 continue
-            if str(division.get("id")) == str(division_id):
+            candidate_id = division.get("divisionId", division.get("id"))
+            if str(candidate_id) == str(division_id):
                 selected = division
                 break
         if selected is None and len(divisions) == 1 and isinstance(divisions[0], dict):
             selected = divisions[0]
         if selected is None:
             raise ValueError(f"Division {division_id} is missing from standings")
+
+        rows = selected.get("standings")
+        if isinstance(rows, list):
+            standings = [
+                parsed
+                for raw in rows
+                if isinstance(raw, dict)
+                and (parsed := cls._parse_standing_row(raw)) is not None
+            ]
+            return sorted(
+                standings, key=lambda item: (item.rank, item.team.casefold())
+            )
 
         table = selected.get("tableData", {})
         if not isinstance(table, dict):
@@ -257,6 +263,24 @@ class CampDovidFetcher:
         return sorted(standings, key=lambda item: (item.rank, item.team.casefold()))
 
     @classmethod
+    def _parse_standing_row(cls, raw: dict[str, Any]) -> CampStanding | None:
+        team = cls._team_name(raw.get("team"))
+        if not team:
+            return None
+        stats = raw.get("stats")
+        if not isinstance(stats, dict):
+            stats = {}
+        return CampStanding(
+            rank=cls._integer(raw.get("rank"), 0),
+            team=team,
+            games_played=cls._integer(stats.get("GP"), 0),
+            wins=cls._integer(stats.get("W"), 0),
+            losses=cls._integer(stats.get("L"), 0),
+            ties=cls._integer(stats.get("T"), 0),
+            points=cls._integer(stats.get("PTS"), 0),
+        )
+
+    @classmethod
     def parse_schedule(cls, payload: Any, zone: ZoneInfo) -> list[CampGame]:
         games_by_id: dict[str, CampGame] = {}
         for raw in cls._schedule_games(payload):
@@ -283,12 +307,14 @@ class CampDovidFetcher:
                 away_score=cls._first_score(
                     away.get("score"),
                     away.get("finalScore"),
+                    away.get("goals"),
                     raw.get("visitorScore"),
                     raw.get("awayScore"),
                 ),
                 home_score=cls._first_score(
                     home.get("score"),
                     home.get("finalScore"),
+                    home.get("goals"),
                     raw.get("homeScore"),
                 ),
                 location=str(raw.get("location") or "").strip(),
@@ -321,6 +347,13 @@ class CampDovidFetcher:
         try:
             return int(values[index])
         except (IndexError, TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _integer(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
             return default
 
     @classmethod
@@ -356,7 +389,11 @@ class CampDovidFetcher:
 
     @classmethod
     def _start_time(cls, raw: dict[str, Any], zone: ZoneInfo) -> datetime:
-        iso_value = raw.get("scheduleStartTime") or raw.get("startTime")
+        iso_value = (
+            raw.get("timeStampZulu")
+            or raw.get("scheduleStartTime")
+            or raw.get("startTime")
+        )
         if iso_value:
             parsed = datetime.fromisoformat(str(iso_value).replace("Z", "+00:00"))
             if parsed.tzinfo is None:
@@ -475,14 +512,17 @@ def _standings_cards(
             lines.append(
                 RichTextLine(
                     (
-                        RichTextSpan(f"{standing.rank} "),
+                        RichTextSpan(str(standing.rank)),
                         RichTextSpan(
                             standing.team,
                             team_color(standing.team),
                             shrink=True,
                         ),
-                        RichTextSpan(f" {record} {standing.points}P"),
-                    )
+                        RichTextSpan(f"{record} {standing.points}"),
+                    ),
+                    alignment="left",
+                    column_starts=(0, 8, 38),
+                    column_alignments=("left", "left", "right"),
                 )
             )
         cards.append(
@@ -569,8 +609,11 @@ def _scored_team_line(team: str, score: str) -> RichTextLine:
     return RichTextLine(
         (
             RichTextSpan(team, team_color(team), shrink=True),
-            RichTextSpan(f" {score}"),
-        )
+            RichTextSpan(score),
+        ),
+        alignment="left",
+        column_starts=(0, 54),
+        column_alignments=("left", "right"),
     )
 
 

@@ -6,7 +6,14 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw
 
-from models import DisplayCard, Game, Team
+from models import (
+    DisplayCard,
+    Game,
+    RichTextCard,
+    RichTextLine,
+    RichTextSpan,
+    Team,
+)
 from renderer import Region, ScoreRenderer, TEAM_LABEL_COLOR, WHITE
 
 
@@ -85,6 +92,42 @@ class RendererTests(unittest.TestCase):
             for x in range(image.width)
         }
         self.assertEqual(colors, {(0, 0, 0), (255, 255, 255)})
+
+    def test_rich_text_columns_use_fixed_left_and_right_anchors(self):
+        renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
+        colors = ((255, 0, 0), (0, 255, 0), (0, 0, 255))
+        card = DisplayCard(
+            type="rich_text",
+            rich_text=RichTextCard(
+                card_id="columns",
+                title="TABLE",
+                lines=(
+                    RichTextLine(
+                        tuple(
+                            RichTextSpan(text, color)
+                            for text, color in zip(("1", "TEAM", "9"), colors)
+                        ),
+                        column_starts=(0, 8, 54),
+                        column_alignments=("left", "left", "right"),
+                    ),
+                ),
+            ),
+        )
+
+        image = renderer.render(card)
+        x_positions = {
+            color: [
+                x
+                for y in range(image.height)
+                for x in range(image.width)
+                if image.getpixel((x, y)) == color
+            ]
+            for color in colors
+        }
+
+        self.assertEqual(min(x_positions[colors[0]]), 1)
+        self.assertEqual(min(x_positions[colors[1]]), 9)
+        self.assertEqual(max(x_positions[colors[2]]), 62)
 
     def test_large_logo_pair_keeps_a_center_gap_with_bounded_outer_crop(self):
         with TemporaryDirectory() as temp_dir:
