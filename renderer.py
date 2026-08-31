@@ -29,6 +29,8 @@ SCORE_CENTER_OFFSET = 11
 SCORE_MAX_HEIGHT = 10
 LOGO_ALPHA_THRESHOLD = 128
 TEXT_MASK_THRESHOLD = 128
+LEAGUE_LOGO_MAX_WIDTH = 60
+LEAGUE_LOGO_MAX_HEIGHT = 28
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,7 +151,9 @@ class ScoreRenderer:
         image = Image.new("RGB", (self.width, self.height), BLACK)
         draw = ImageDraw.Draw(image)
 
-        if card.type in {"header", "message"}:
+        if card.type == "header":
+            self._render_league_header(image, draw, card.title)
+        elif card.type == "message":
             self._render_title(draw, card.title)
         elif card.game is not None:
             self._render_game(image, draw, card.game)
@@ -184,6 +188,32 @@ class ScoreRenderer:
             max_height=max(1, self.height - 2),
         )
         self._draw_text_in_region(draw, text, region, font)
+
+    def _render_league_header(
+        self,
+        image: Image.Image,
+        draw: ImageDraw.ImageDraw,
+        title: str,
+    ) -> None:
+        league = title.upper()
+        max_width = max(
+            1,
+            (self.width * LEAGUE_LOGO_MAX_WIDTH + REFERENCE_WIDTH // 2)
+            // REFERENCE_WIDTH,
+        )
+        max_height = self._scaled_rows(LEAGUE_LOGO_MAX_HEIGHT)
+        logo = self._load_logo(
+            "LEAGUES",
+            league,
+            max_width,
+            max_height,
+        )
+        if logo is None:
+            self._render_title(draw, title)
+            return
+
+        region = Region(0, 0, self.width, self.height)
+        image.paste(logo, region.centered_origin(logo.size), logo)
 
     def _render_game(
         self,

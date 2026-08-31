@@ -9,6 +9,7 @@ images either to a Tkinter development preview or an HZeller HUB75 LED matrix.
 - Games whose scheduled start was within the previous 24 hours.
 - Games scheduled later in the current Eastern calendar day.
 - Live scores refreshed independently from the card rotation interval.
+- Centered NHL, NFL, and MLB league marks on the league title cards.
 - Live Yankees, Rangers, and Lions games dwell for three minutes on each pass;
   every other card uses the normal five-second dwell.
 - Final scores with `FINAL MM/DD`.
@@ -141,6 +142,11 @@ sampling, and converts logo alpha to fully transparent or fully opaque pixels.
 It reserves a center gap between each pair of scaled marks. When a large pair
 needs more room, it crops only their outer edges, by no more than one-third. If
 a PNG is missing, the team abbreviation is shown instead.
+
+League title-card marks are stored in `Logos/LEAGUES/`. They are centered on the
+full canvas, preserve their source proportions, and fit within 60x28 pixels at
+the reference 64x32 resolution. If a league mark is missing, the original text
+title is shown as a fallback.
 
 ## 64x32 pixel layout
 

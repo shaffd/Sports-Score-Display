@@ -64,20 +64,45 @@ class RendererTests(unittest.TestCase):
         image = renderer.render(DisplayCard(type="game", game=self._live_game()))
         self.assertEqual(image.size, (128, 64))
 
-    def test_header_visible_glyphs_are_centered_on_the_full_panel(self):
-        renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
+    def test_league_header_logo_is_centered_on_the_full_panel(self):
+        with TemporaryDirectory() as temp_dir:
+            logo_dir = Path(temp_dir) / "LEAGUES"
+            logo_dir.mkdir(parents=True)
+            Image.new("RGBA", (20, 28), (255, 0, 0, 255)).save(
+                logo_dir / "NFL.png"
+            )
+            renderer = ScoreRenderer(
+                64,
+                32,
+                ZoneInfo("America/New_York"),
+                logo_directory=temp_dir,
+            )
 
-        image = renderer.render(DisplayCard(type="header", title="NFL"))
-        bounds = image.getbbox()
+            image = renderer.render(DisplayCard(type="header", title="NFL"))
 
-        self.assertIsNotNone(bounds)
-        self.assertLessEqual(abs((bounds[0] + bounds[2]) - image.width), 1)
-        self.assertLessEqual(abs((bounds[1] + bounds[3]) - image.height), 1)
+            self.assertEqual(image.getbbox(), (22, 2, 42, 30))
+            self.assertEqual(image.getpixel((22, 2)), (255, 0, 0))
+
+    def test_missing_league_logo_falls_back_to_centered_title_text(self):
+        with TemporaryDirectory() as temp_dir:
+            renderer = ScoreRenderer(
+                64,
+                32,
+                ZoneInfo("America/New_York"),
+                logo_directory=temp_dir,
+            )
+
+            image = renderer.render(DisplayCard(type="header", title="NFL"))
+            bounds = image.getbbox()
+
+            self.assertIsNotNone(bounds)
+            self.assertLessEqual(abs((bounds[0] + bounds[2]) - image.width), 1)
+            self.assertLessEqual(abs((bounds[1] + bounds[3]) - image.height), 1)
 
     def test_default_text_uses_only_fully_on_or_fully_off_pixels(self):
         renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
 
-        image = renderer.render(DisplayCard(type="header", title="MLB"))
+        image = renderer.render(DisplayCard(type="message", title="NO GAMES"))
 
         colors = {
             image.getpixel((x, y))
