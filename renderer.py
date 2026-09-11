@@ -9,12 +9,13 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 
 from display_utils import format_status
-from models import DisplayCard, Game
+from models import DisplayCard, FantasyPlayer, Game
 
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 TEAM_LABEL_COLOR = (255, 196, 0)
+FANTASY_ACCENT = (40, 220, 120)
 
 # These values are deliberately expressed against the physical 64x32 panel.
 # The layout scales them for larger canvases while keeping all coordinates integral.
@@ -153,11 +154,104 @@ class ScoreRenderer:
 
         if card.type == "header":
             self._render_league_header(image, draw, card.title)
+        elif card.type == "fantasy_header":
+            self._render_fantasy_header(draw)
+        elif card.type == "fantasy" and card.fantasy_player is not None:
+            self._render_fantasy_player(draw, card.fantasy_player)
         elif card.type == "message":
             self._render_title(draw, card.title)
         elif card.game is not None:
             self._render_game(image, draw, card.game)
         return image
+
+    def _render_fantasy_header(self, draw: ImageDraw.ImageDraw) -> None:
+        """Render the title card for the fantasy-player rotation."""
+        accent_rows = max(1, self.height // 32)
+        draw.rectangle((0, 0, self.width - 1, accent_rows - 1), fill=FANTASY_ACCENT)
+        draw.rectangle(
+            (0, self.height - accent_rows, self.width - 1, self.height - 1),
+            fill=FANTASY_ACCENT,
+        )
+        top = Region(0, accent_rows + 1, self.width, self.height // 2)
+        bottom = Region(0, self.height // 2, self.width, self.height - accent_rows - 1)
+        for text, region in (("FANTASY", top), ("FOOTBALL", bottom)):
+            font = self._fitted_font(
+                text,
+                max_width=max(1, region.width - 4),
+                preferred_size=max(5, region.height),
+                max_height=region.height,
+            )
+            self._draw_text_in_region(draw, text, region, font)
+
+    def _render_fantasy_player(
+        self,
+        draw: ImageDraw.ImageDraw,
+        player: FantasyPlayer,
+    ) -> None:
+        """Render a four-line, position-aware stat card for a 64x32 panel."""
+        rows = self._fantasy_lines(player)
+        row_height = max(1, self.height // 4)
+        for index, (text, color) in enumerate(rows):
+            region = Region(
+                1,
+                index * row_height,
+                self.width - 1,
+                self.height if index == len(rows) - 1 else (index + 1) * row_height,
+            )
+            font = self._fitted_font(
+                text,
+                max_width=region.width,
+                preferred_size=max(5, region.height),
+                max_height=region.height,
+            )
+            fitted = self._trim_to_width(draw, text, font, region.width)
+            self._draw_mask(
+                draw,
+                (region.left, region.top + (region.height - self._text_size(draw, fitted, font)[1]) // 2),
+                self._rasterize_text(fitted, font),
+                fill=color,
+            )
+
+    @staticmethod
+    def _fantasy_value(value: int | None, fallback: str = "-") -> str:
+        return fallback if value is None else str(value)
+
+    def _fantasy_lines(self, player: FantasyPlayer) -> list[tuple[str, tuple[int, int, int]]]:
+        """Build concise lines while retaining every relevant stat category."""
+        title = f"{player.display_name} {player.position.upper()} {player.team.upper()}"
+        position = player.position.upper()
+
+        if position == "K":
+            stats = [
+                f"FG {self._fantasy_value(player.field_goals_made)}/{self._fantasy_value(player.field_goals_attempted)}",
+                f"XP {self._fantasy_value(player.extra_points_made)}/{self._fantasy_value(player.extra_points_attempted)} PTS {self._fantasy_value(player.kicking_points)}",
+                player.game_status.upper(),
+            ]
+        elif position == "QB":
+            stats = [
+                "PASS "
+                f"{self._fantasy_value(player.completions)}/{self._fantasy_value(player.pass_attempts)} "
+                f"{self._fantasy_value(player.passing_yards)}Y",
+                "TD "
+                f"{self._fantasy_value(player.passing_touchdowns)} INT {self._fantasy_value(player.interceptions)} "
+                f"FUM {self._fantasy_value(player.fumbles_lost, '0')}",
+                "RUSH "
+                f"{self._fantasy_value(player.rush_attempts)}/{self._fantasy_value(player.rushing_yards)}Y "
+                f"{self._fantasy_value(player.rushing_touchdowns, '0')}TD",
+            ]
+        else:
+            stats = [
+                "RUSH "
+                f"{self._fantasy_value(player.rush_attempts)}/{self._fantasy_value(player.rushing_yards)}Y "
+                f"{self._fantasy_value(player.rushing_touchdowns, '0')}TD",
+                "REC "
+                f"{self._fantasy_value(player.receptions)}/{self._fantasy_value(player.targets)} "
+                f"{self._fantasy_value(player.receiving_yards)}Y "
+                f"{self._fantasy_value(player.receiving_touchdowns, '0')}TD",
+                f"FUM {self._fantasy_value(player.fumbles_lost, '0')} {player.game_status.upper()}",
+            ]
+
+        return [(title, FANTASY_ACCENT), *((line, WHITE) for line in stats)]
 
     def _scaled_rows(self, reference_rows: int) -> int:
         return max(

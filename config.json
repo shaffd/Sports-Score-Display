@@ -22,6 +22,27 @@
     "logo_directory": "Logos",
     "font_path": null
   },
+  "fantasy_football": {
+    "enabled": true,
+    "players": [
+      {"player_id": "hurts", "first_name": "Jalen", "last_name": "Hurts", "position": "QB", "team": "PHI"},
+      {"player_id": "dowdle", "first_name": "Rico", "last_name": "Dowdle", "position": "RB", "team": "PIT"},
+      {"player_id": "gibbs", "first_name": "Jahmyr", "last_name": "Gibbs", "position": "RB", "team": "DET"},
+      {"player_id": "collins", "first_name": "Nico", "last_name": "Collins", "position": "WR", "team": "HOU"},
+      {"player_id": "flowers", "first_name": "Zay", "last_name": "Flowers", "position": "WR", "team": "BAL"},
+      {"player_id": "london", "first_name": "Drake", "last_name": "London", "position": "WR", "team": "ATL"},
+      {"player_id": "loveland", "first_name": "Colston", "last_name": "Loveland", "position": "TE", "team": "CHI"},
+      {"player_id": "lloyd", "first_name": "MarShawn", "last_name": "Lloyd", "position": "RB", "team": "GB"},
+      {"player_id": "fairbairn", "first_name": "Ka'imi", "last_name": "Fairbairn", "position": "K", "team": "HOU"},
+      {"player_id": "allen", "first_name": "Josh", "last_name": "Allen", "position": "QB", "team": "BUF"},
+      {"player_id": "taylor", "first_name": "Jonathan", "last_name": "Taylor", "position": "RB", "team": "IND"},
+      {"player_id": "brown", "first_name": "Chase", "last_name": "Brown", "position": "RB", "team": "CIN"},
+      {"player_id": "adams", "first_name": "Davante", "last_name": "Adams", "position": "WR", "team": "LAR"},
+      {"player_id": "fannin", "first_name": "Harold", "last_name": "Fannin Jr", "position": "TE", "team": "CLE"},
+      {"player_id": "montgomery", "first_name": "David", "last_name": "Montgomery", "position": "RB", "team": "HOU"},
+      {"player_id": "bates", "first_name": "John", "last_name": "Bates", "position": "TE", "team": "WAS"}
+    ]
+  },
   "matrix": {
     "rows": 32,
     "cols": 64,

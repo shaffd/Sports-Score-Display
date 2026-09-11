@@ -10,7 +10,13 @@ from datetime import datetime, timedelta
 
 from config import AppConfig, ConfigError, load_config
 from data_fetcher import DataFetcher
-from display_utils import build_cards, card_display_seconds, display_window
+from display_utils import (
+    build_cards,
+    card_display_seconds,
+    display_window,
+    fantasy_display_is_active,
+    fantasy_display_window,
+)
 from models import DisplayCard
 from outputs import DisplayClosed, create_output
 from renderer import ScoreRenderer
@@ -45,11 +51,29 @@ class ScoreDisplayApp:
         start, end = display_window(now, self.config.lookback_hours)
         query_end = (end - timedelta(microseconds=1)).date()
         batch = self.fetcher.fetch_games(start.date(), query_end, self.config.sports)
+        if (
+            self.config.fantasy_football.enabled
+            and fantasy_display_is_active(now)
+        ):
+            fantasy_start, fantasy_end = fantasy_display_window(now)
+            try:
+                batch.fantasy_players = self.fetcher.fetch_nfl_fantasy_players(
+                    fantasy_start.date(),
+                    (fantasy_end - timedelta(microseconds=1)).date(),
+                    self.config.fantasy_football.players,
+                )
+            except Exception as exc:
+                LOGGER.warning("Fantasy refresh failed: %s", exc)
+                batch.errors["FANTASY"] = str(exc)
+                batch.fantasy_players = self.fetcher.fantasy_templates(
+                    self.config.fantasy_football.players
+                )
         refreshed_cards = build_cards(
             batch.games,
             self.config,
             now=now,
             had_errors=bool(batch.errors),
+            fantasy_players=batch.fantasy_players,
         )
         self.cards = refreshed_cards
 

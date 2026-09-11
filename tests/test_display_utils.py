@@ -3,14 +3,16 @@ from pathlib import Path
 import unittest
 from zoneinfo import ZoneInfo
 
-from config import AppConfig, AssetConfig
+from config import AppConfig, AssetConfig, FantasyFootballConfig
 from display_utils import (
     build_cards,
     card_display_seconds,
+    fantasy_display_is_active,
+    fantasy_display_window,
     format_status,
     select_games,
 )
-from models import Game, Team
+from models import FantasyPlayer, Game, Team
 
 
 def make_game(game_id: str, start: datetime, status: str = "scheduled") -> Game:
@@ -123,6 +125,35 @@ class DisplayUtilsTests(unittest.TestCase):
             card_display_seconds(DisplayCard(type="game", game=live_tigers), config),
             5,
         )
+
+    def test_fantasy_window_starts_thursday_at_noon_and_ends_wednesday(self):
+        before_start = datetime(2026, 9, 10, 11, 59, tzinfo=self.zone)
+        start = datetime(2026, 9, 10, 12, 0, tzinfo=self.zone)
+        end = datetime(2026, 9, 16, 0, 0, tzinfo=self.zone)
+
+        self.assertFalse(fantasy_display_is_active(before_start))
+        self.assertTrue(fantasy_display_is_active(start))
+        self.assertFalse(fantasy_display_is_active(end))
+        self.assertEqual(fantasy_display_window(start), (start, end))
+
+    def test_fantasy_cards_are_added_only_inside_the_weekly_window(self):
+        config = AppConfig(
+            sports=("NFL",),
+            show_sport_headers=False,
+            fantasy_football=FantasyFootballConfig(enabled=True),
+        )
+        player = FantasyPlayer("test", "Josh", "Allen", "QB", "BUF")
+        active = datetime(2026, 9, 10, 12, 0, tzinfo=self.zone)
+        inactive = datetime(2026, 9, 9, 18, 0, tzinfo=self.zone)
+
+        active_cards = build_cards([], config, active, fantasy_players=[player])
+        inactive_cards = build_cards([], config, inactive, fantasy_players=[player])
+
+        self.assertEqual(
+            [card.key for card in active_cards],
+            ["fantasy_header:FANTASY FOOTBALL", "fantasy:test"],
+        )
+        self.assertEqual([card.key for card in inactive_cards], ["message:NO GAMES"])
 
 
 if __name__ == "__main__":

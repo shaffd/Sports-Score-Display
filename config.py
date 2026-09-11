@@ -33,6 +33,23 @@ class AssetConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class FantasyPlayerConfig:
+    """One fantasy player to resolve in the NFL box score feed."""
+
+    player_id: str
+    first_name: str
+    last_name: str
+    position: str
+    team: str
+
+
+@dataclass(frozen=True, slots=True)
+class FantasyFootballConfig:
+    enabled: bool = False
+    players: tuple[FantasyPlayerConfig, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class MatrixConfig:
     rows: int = 32
     cols: int = 64
@@ -69,6 +86,7 @@ class AppConfig:
     preview_scale: int = 8
     canvas: CanvasConfig = CanvasConfig()
     assets: AssetConfig = AssetConfig()
+    fantasy_football: FantasyFootballConfig = FantasyFootballConfig()
     matrix: MatrixConfig = MatrixConfig()
 
     @property
@@ -107,6 +125,40 @@ def _favorite_teams(value: object) -> tuple[tuple[str, str], ...]:
     return tuple(favorites)
 
 
+def _fantasy_players(value: object) -> tuple[FantasyPlayerConfig, ...]:
+    if not isinstance(value, list):
+        raise ConfigError("fantasy_football.players must be a list")
+
+    players: list[FantasyPlayerConfig] = []
+    seen_ids: set[str] = set()
+    for raw_player in value:
+        if not isinstance(raw_player, dict):
+            raise ConfigError("Each fantasy_football player must be an object")
+        fields = {
+            name: str(raw_player.get(name, "")).strip()
+            for name in ("player_id", "first_name", "last_name", "position", "team")
+        }
+        missing = [name for name, field in fields.items() if not field]
+        if missing:
+            raise ConfigError(
+                "fantasy_football player is missing " + ", ".join(missing)
+            )
+        player_id = fields["player_id"].lower()
+        if player_id in seen_ids:
+            raise ConfigError(f"Duplicate fantasy player_id: {player_id}")
+        seen_ids.add(player_id)
+        players.append(
+            FantasyPlayerConfig(
+                player_id=player_id,
+                first_name=fields["first_name"],
+                last_name=fields["last_name"],
+                position=fields["position"].upper(),
+                team=fields["team"].upper(),
+            )
+        )
+    return tuple(players)
+
+
 def load_config(path: str | Path = "config.json") -> AppConfig:
     """Load an AppConfig, resolving asset paths relative to the JSON file."""
     config_path = Path(path).resolve()
@@ -121,6 +173,9 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
     canvas_raw = raw.get("canvas", {})
     assets_raw = raw.get("assets", {})
     matrix_raw = raw.get("matrix", {})
+    fantasy_raw = raw.get("fantasy_football", {})
+    if not isinstance(fantasy_raw, dict):
+        raise ConfigError("fantasy_football must be an object")
 
     canvas = CanvasConfig(
         width=int(canvas_raw.get("width", 64)),
@@ -166,6 +221,10 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
             for sport, team in DEFAULT_FAVORITE_TEAMS
         },
     )
+    fantasy_football = FantasyFootballConfig(
+        enabled=bool(fantasy_raw.get("enabled", False)),
+        players=_fantasy_players(fantasy_raw.get("players", [])),
+    )
 
     config = AppConfig(
         timezone=str(raw.get("timezone", "America/New_York")),
@@ -183,6 +242,7 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         preview_scale=int(raw.get("preview_scale", 8)),
         canvas=canvas,
         assets=assets,
+        fantasy_football=fantasy_football,
         matrix=matrix,
     )
 
@@ -195,6 +255,8 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         raise ConfigError("output must be either 'preview' or 'matrix'")
     if not config.sports:
         raise ConfigError("sports must contain at least one league")
+    if config.fantasy_football.enabled and not config.fantasy_football.players:
+        raise ConfigError("fantasy_football.players must not be empty when enabled")
 
     for name, value in (
         ("lookback_hours", config.lookback_hours),

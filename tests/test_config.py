@@ -16,6 +16,9 @@ class ConfigTests(unittest.TestCase):
             set(config.favorite_teams),
             {("MLB", "NYY"), ("NHL", "NYR"), ("NFL", "DET")},
         )
+        self.assertTrue(config.fantasy_football.enabled)
+        self.assertEqual(len(config.fantasy_football.players), 16)
+        self.assertEqual(config.fantasy_football.players[0].player_id, "hurts")
 
 
 if __name__ == "__main__":

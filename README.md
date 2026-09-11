@@ -127,6 +127,27 @@ favorite card is re-rendered after every data refresh while its three-minute
 dwell remains active, keeping NHL and NFL clocks and scores current in both
 preview and matrix output modes.
 
+## Fantasy football cards
+
+The `fantasy_football` configuration lists the players to follow. Each entry
+uses a stable local `player_id`, first and last name (used to match the NFL
+box score), position, and NFL team abbreviation. The same configured roster is
+shown for either fantasy platform because this display presents official game
+statistics rather than platform-specific fantasy points.
+
+Fantasy cards automatically enter the rotation every Thursday at 12:00 PM
+through Tuesday at 11:59 PM in the configured timezone. A `FANTASY FOOTBALL`
+title card precedes the player cards. The app fetches ESPN's NFL scoreboard and
+per-game box-score data during that window, retaining scheduled player cards
+before kickoff and refreshing passing, rushing, receiving, fumble, and kicking
+statistics as games progress.
+
+On a 64x32 panel, each card uses a position-aware layout: quarterbacks show
+passing and rushing; running backs, receivers, and tight ends show rushing,
+receiving, and fumbles; kickers show field goals, extra points, and points.
+Names display as a first initial plus full last name and are cropped only when
+the panel requires it.
+
 ## Team logos
 
 Add transparent PNGs using uppercase team abbreviations:

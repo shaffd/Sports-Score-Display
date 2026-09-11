@@ -2,6 +2,7 @@ from datetime import timezone
 import unittest
 
 from data_fetcher import DataFetcher
+from models import FantasyPlayer
 
 
 class DataFetcherTests(unittest.TestCase):
@@ -156,6 +157,57 @@ class DataFetcherTests(unittest.TestCase):
         self.assertEqual(game.status, "live")
         self.assertEqual((game.away_score, game.home_score), (2, 1))
         self.assertEqual((game.period, game.clock), (2, "08:12"))
+
+    def test_fantasy_summary_extracts_passing_and_rushing_stats(self):
+        player = FantasyPlayer("hurts", "Jalen", "Hurts", "QB", "PHI")
+        payload = {
+            "boxscore": {
+                "players": [
+                    {
+                        "statistics": [
+                            {
+                                "name": "passing",
+                                "labels": [
+                                    "C/ATT",
+                                    "YDS",
+                                    "TD",
+                                    "INT",
+                                ],
+                                "athletes": [
+                                    {
+                                        "athlete": {"displayName": "Jalen Hurts"},
+                                        "stats": ["19/26", "240", "2", "1"],
+                                    }
+                                ],
+                            },
+                            {
+                                "name": "rushing",
+                                "labels": [
+                                    "CAR",
+                                    "YDS",
+                                    "TD",
+                                ],
+                                "athletes": [
+                                    {
+                                        "athlete": {"displayName": "Jalen Hurts"},
+                                        "stats": ["8", "34", "1"],
+                                    }
+                                ],
+                            },
+                        ]
+                    }
+                ]
+            }
+        }
+
+        resolved = DataFetcher.parse_nfl_fantasy_summary(
+            payload, [player], "Q3 6:24"
+        )["hurts"]
+
+        self.assertEqual((resolved.completions, resolved.pass_attempts), (19, 26))
+        self.assertEqual(resolved.passing_yards, 240)
+        self.assertEqual(resolved.rushing_yards, 34)
+        self.assertEqual(resolved.game_status, "Q3 6:24")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw
 
-from models import DisplayCard, Game, Team
+from models import DisplayCard, FantasyPlayer, Game, Team
 from renderer import Region, ScoreRenderer, TEAM_LABEL_COLOR, WHITE
 
 
@@ -110,6 +110,45 @@ class RendererTests(unittest.TestCase):
             for x in range(image.width)
         }
         self.assertEqual(colors, {(0, 0, 0), (255, 255, 255)})
+
+    def test_fantasy_cards_use_initial_and_last_name_with_position_stats(self):
+        renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
+        player = FantasyPlayer(
+            player_id="hurts",
+            first_name="Jalen",
+            last_name="Hurts",
+            position="QB",
+            team="PHI",
+            completions=19,
+            pass_attempts=26,
+            passing_yards=240,
+            passing_touchdowns=2,
+            interceptions=1,
+            rush_attempts=8,
+            rushing_yards=34,
+            rushing_touchdowns=1,
+            fumbles_lost=0,
+        )
+
+        self.assertEqual(player.display_name, "J. HURTS")
+        image = renderer.render(DisplayCard(type="fantasy", fantasy_player=player))
+
+        self.assertEqual(image.size, (64, 32))
+        self.assertTrue(
+            any(
+                image.getpixel((x, y)) == (40, 220, 120)
+                for x in range(image.width)
+                for y in range(image.height)
+            )
+        )
+
+    def test_fantasy_title_card_has_accent_bars(self):
+        renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
+
+        image = renderer.render(DisplayCard(type="fantasy_header"))
+
+        self.assertEqual(image.getpixel((0, 0)), (40, 220, 120))
+        self.assertEqual(image.getpixel((0, 31)), (40, 220, 120))
 
     def test_large_logo_pair_keeps_a_center_gap_with_bounded_outer_crop(self):
         with TemporaryDirectory() as temp_dir:

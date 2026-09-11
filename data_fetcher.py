@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+import re
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
 
 import requests
 
-from models import FetchBatch, Game, Team
+from config import FantasyPlayerConfig
+from models import FantasyPlayer, FetchBatch, Game, Team
 
 
 LOGGER = logging.getLogger(__name__)
@@ -20,6 +23,9 @@ class DataFetcher:
     NHL_BASE = "https://api-web.nhle.com/v1"
     NFL_SCOREBOARD = (
         "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    )
+    NFL_SUMMARY = (
+        "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/summary"
     )
     MLB_BASE = "https://statsapi.mlb.com/api/v1"
     MLB_LIVE_BASE = "https://statsapi.mlb.com/api/v1.1"
@@ -90,6 +96,203 @@ class DataFetcher:
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    # ---------------------------------------------------------- Fantasy NFL
+
+    @staticmethod
+    def fantasy_templates(
+        players: Iterable[FantasyPlayerConfig],
+    ) -> list[FantasyPlayer]:
+        """Create stable, no-stat placeholders from the configured roster."""
+        return [
+            FantasyPlayer(
+                player_id=player.player_id,
+                first_name=player.first_name,
+                last_name=player.last_name,
+                position=player.position,
+                team=player.team,
+            )
+            for player in players
+        ]
+
+    @staticmethod
+    def _normalized_player_name(value: str) -> str:
+        return "".join(character for character in value.lower() if character.isalnum())
+
+    @staticmethod
+    def _stat_int(value: Any) -> int | None:
+        if value in (None, "", "-"):
+            return None
+        match = re.search(r"-?\d+", str(value))
+        return int(match.group()) if match else None
+
+    @classmethod
+    def _split_stat(cls, value: Any) -> tuple[int | None, int | None]:
+        pieces = str(value).split("/", maxsplit=1)
+        if len(pieces) != 2:
+            return (None, None)
+        return (cls._stat_int(pieces[0]), cls._stat_int(pieces[1]))
+
+    @staticmethod
+    def _fantasy_game_status(event: dict[str, Any]) -> str:
+        competition = (event.get("competitions") or [{}])[0]
+        status = competition.get("status") or event.get("status") or {}
+        status_type = status.get("type") or {}
+        if status_type.get("completed") or str(status_type.get("state", "")).lower() == "post":
+            return "FINAL"
+        if str(status_type.get("state", "")).lower() == "in":
+            period = status.get("period")
+            clock = status.get("displayClock")
+            return " ".join(
+                part for part in (f"Q{period}" if period else "LIVE", clock) if part
+            )
+        return "SCHEDULED"
+
+    @classmethod
+    def _apply_fantasy_stat(
+        cls,
+        updates: dict[str, int],
+        raw_name: Any,
+        raw_value: Any,
+    ) -> None:
+        name = "".join(character for character in str(raw_name).lower() if character.isalnum())
+        if name in {"completionspassingattempts", "catt", "passingcatt"}:
+            completions, attempts = cls._split_stat(raw_value)
+            if completions is not None:
+                updates["completions"] = completions
+            if attempts is not None:
+                updates["pass_attempts"] = attempts
+            return
+        if name in {"fieldgoalsmadefieldgoalsattempted", "fg", "kickingfg"}:
+            made, attempts = cls._split_stat(raw_value)
+            if made is not None:
+                updates["field_goals_made"] = made
+            if attempts is not None:
+                updates["field_goals_attempted"] = attempts
+            return
+        if name in {"extrapointsmadeextrapointsattempted", "xp", "kickingxp"}:
+            made, attempts = cls._split_stat(raw_value)
+            if made is not None:
+                updates["extra_points_made"] = made
+            if attempts is not None:
+                updates["extra_points_attempted"] = attempts
+            return
+
+        fields = {
+            "passingyards": "passing_yards",
+            "passingyds": "passing_yards",
+            "passingtouchdowns": "passing_touchdowns",
+            "passingtd": "passing_touchdowns",
+            "interceptions": "interceptions",
+            "passingint": "interceptions",
+            "rushingattempts": "rush_attempts",
+            "rushingcar": "rush_attempts",
+            "rushingyards": "rushing_yards",
+            "rushingyds": "rushing_yards",
+            "rushingtouchdowns": "rushing_touchdowns",
+            "rushingtd": "rushing_touchdowns",
+            "receptions": "receptions",
+            "receivingrec": "receptions",
+            "receivingtargets": "targets",
+            "receivingtgts": "targets",
+            "targets": "targets",
+            "receivingyards": "receiving_yards",
+            "receivingyds": "receiving_yards",
+            "receivingtouchdowns": "receiving_touchdowns",
+            "receivingtd": "receiving_touchdowns",
+            "fumbleslost": "fumbles_lost",
+            "kickingpoints": "kicking_points",
+            "kickingpts": "kicking_points",
+            "totalkickingpoints": "kicking_points",
+        }
+        field = fields.get(name)
+        value = cls._stat_int(raw_value)
+        if field is not None and value is not None:
+            updates[field] = value
+
+    @classmethod
+    def parse_nfl_fantasy_summary(
+        cls,
+        payload: dict[str, Any],
+        players: Iterable[FantasyPlayer],
+        game_status: str,
+    ) -> dict[str, FantasyPlayer]:
+        """Extract configured player lines from ESPN's per-event box score."""
+        templates = {
+            cls._normalized_player_name(
+                f"{player.first_name} {player.last_name}"
+            ): player
+            for player in players
+        }
+        resolved: dict[str, FantasyPlayer] = {}
+        for team_box in (payload.get("boxscore") or {}).get("players", []):
+            for category in team_box.get("statistics", []):
+                category_name = str(category.get("name") or "")
+                names = category.get("names") or []
+                labels = category.get("labels") or []
+                for athlete_stats in category.get("athletes", []):
+                    athlete = athlete_stats.get("athlete") or {}
+                    player = templates.get(
+                        cls._normalized_player_name(
+                            str(athlete.get("displayName") or athlete.get("fullName") or "")
+                        )
+                    )
+                    if player is None:
+                        continue
+                    updates: dict[str, int] = {}
+                    for index, value in enumerate(athlete_stats.get("stats") or []):
+                        if index < len(names):
+                            cls._apply_fantasy_stat(updates, names[index], value)
+                        if index < len(labels):
+                            cls._apply_fantasy_stat(
+                                updates, f"{category_name}.{labels[index]}", value
+                            )
+                    current = resolved.get(player.player_id, player)
+                    resolved[player.player_id] = replace(
+                        current, game_status=game_status, **updates
+                    )
+        return resolved
+
+    def fetch_nfl_fantasy_players(
+        self,
+        start_date: date,
+        end_date: date,
+        players: Iterable[FantasyPlayerConfig],
+    ) -> list[FantasyPlayer]:
+        """Resolve player box-score stats over the active fantasy display window."""
+        result = self.fantasy_templates(players)
+        by_id = {player.player_id: player for player in result}
+        events: dict[str, dict[str, Any]] = {}
+        for game_date in self._dates(start_date, end_date):
+            payload = self._get_json(
+                self.NFL_SCOREBOARD,
+                params={"dates": game_date.strftime("%Y%m%d"), "limit": 100},
+            )
+            for event in payload.get("events", []):
+                if event.get("id"):
+                    events[str(event["id"])] = event
+
+        for event in events.values():
+            status = self._fantasy_game_status(event)
+            competition = (event.get("competitions") or [{}])[0]
+            teams = {
+                str(competitor.get("team", {}).get("abbreviation", "")).upper()
+                for competitor in competition.get("competitors", [])
+            }
+            for player_id, player in by_id.items():
+                if player.team.upper() in teams:
+                    by_id[player_id] = replace(player, game_status=status)
+            if status == "SCHEDULED":
+                continue
+            try:
+                summary = self._get_json(self.NFL_SUMMARY, params={"event": event["id"]})
+                by_id.update(
+                    self.parse_nfl_fantasy_summary(summary, by_id.values(), status)
+                )
+            except Exception as exc:
+                LOGGER.warning("Fantasy stats unavailable for NFL event %s: %s", event["id"], exc)
+
+        return [by_id[player.player_id] for player in result]
 
     # ------------------------------------------------------------------ NHL
 

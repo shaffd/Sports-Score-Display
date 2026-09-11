@@ -6,7 +6,7 @@ from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from config import AppConfig
-from models import DisplayCard, Game
+from models import DisplayCard, FantasyPlayer, Game
 
 
 def format_start_time(start_time_utc: datetime, zone: ZoneInfo) -> str:
@@ -51,6 +51,27 @@ def display_window(now: datetime, lookback_hours: int) -> tuple[datetime, dateti
     return start, end
 
 
+def fantasy_display_window(now: datetime) -> tuple[datetime, datetime]:
+    """Return the current Thursday-noon through Wednesday-midnight window."""
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    days_since_thursday = (now.weekday() - 3) % 7
+    thursday = now.date() - timedelta(days=days_since_thursday)
+    start = datetime.combine(thursday, time(hour=12), tzinfo=now.tzinfo)
+    if now < start:
+        start -= timedelta(days=7)
+    end = datetime.combine(
+        start.date() + timedelta(days=6), time.min, tzinfo=now.tzinfo
+    )
+    return start, end
+
+
+def fantasy_display_is_active(now: datetime) -> bool:
+    """Whether fantasy cards should be part of the current rotation."""
+    start, end = fantasy_display_window(now)
+    return start <= now < end
+
+
 def select_games(
     games: list[Game],
     now: datetime,
@@ -71,6 +92,7 @@ def build_cards(
     config: AppConfig,
     now: datetime | None = None,
     had_errors: bool = False,
+    fantasy_players: list[FantasyPlayer] | None = None,
 ) -> list[DisplayCard]:
     """Group selected games by configured sport order and add optional headers."""
     current = now or datetime.now(config.zone)
@@ -87,6 +109,17 @@ def build_cards(
         if config.show_sport_headers:
             cards.append(DisplayCard(type="header", title=sport))
         cards.extend(DisplayCard(type="game", game=game) for game in sport_games)
+
+    if (
+        config.fantasy_football.enabled
+        and fantasy_display_is_active(current)
+        and fantasy_players
+    ):
+        cards.append(DisplayCard(type="fantasy_header", title="FANTASY FOOTBALL"))
+        cards.extend(
+            DisplayCard(type="fantasy", fantasy_player=player)
+            for player in fantasy_players
+        )
 
     if not cards:
         title = "DATA ERROR" if had_errors else "NO GAMES"
