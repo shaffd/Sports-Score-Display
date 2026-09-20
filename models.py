@@ -65,6 +65,9 @@ class Game:
     home: Team
     away_score: int | None = None
     home_score: int | None = None
+    # Blank during the regular season; otherwise a compact API-derived label
+    # such as PRE, ALDS, R2, or AFC WC.
+    game_type_label: str | None = None
 
     # NFL/NHL live fields
     period: int | None = None
