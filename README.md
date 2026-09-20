@@ -7,13 +7,15 @@ images either to a Tkinter development preview or an HZeller HUB75 LED matrix.
 ## What it displays
 
 - Games whose scheduled start was within the previous 24 hours.
-- Games scheduled later in the current Eastern calendar day.
+- Games scheduled within the next 24 hours.
 - Live scores refreshed independently from the card rotation interval.
 - Centered NHL, NFL, and MLB league marks on the league title cards.
 - Live Yankees, Rangers, and Lions games dwell for three minutes on each pass;
   every other card uses the normal five-second dwell.
 - Final scores with `FINAL MM/DD`.
 - Scheduled games with Eastern time and `MM/DD`.
+- Compact non-regular-season markers: `PRE` for preseason and API-derived
+  playoff rounds such as `ALDS`, `R2`, `SCF`, and `AFC WC`.
 - Prominent away and home logos, labeled `A`/`H`, with a clear center gap.
   Only their outer edges may be cropped, never by more than one-third.
 - Final and live scores separated by a short dash; upcoming matchups use `@`.
