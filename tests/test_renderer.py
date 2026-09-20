@@ -351,6 +351,20 @@ class RendererTests(unittest.TestCase):
         self.assertIsNotNone(marker_bounds)
         self.assertEqual(image.getpixel((32, center_y)), WHITE)
 
+    def test_game_type_is_centered_above_a_scheduled_game_marker(self):
+        renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
+        game = self._live_game()
+        game.status = "scheduled"
+        game.game_type_label = "ALDS"
+        layout = renderer._layout_for(game)
+        image = renderer.render(DisplayCard(type="game", game=game))
+
+        self.assertIsNotNone(layout.game_type)
+        self.assertLess(layout.game_type.bottom, layout.scores.top + 1)
+        bounds = image.crop((0, layout.game_type.top, 64, layout.game_type.bottom)).getbbox()
+        self.assertIsNotNone(bounds)
+        self.assertLessEqual(abs((bounds[0] + bounds[2]) - 64), 1)
+
     def test_mlb_outs_uses_the_compact_rounded_o_distinct_from_zero(self):
         renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
         font = renderer._font(5)

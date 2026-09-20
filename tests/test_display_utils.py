@@ -31,19 +31,20 @@ class DisplayUtilsTests(unittest.TestCase):
         self.zone = ZoneInfo("America/New_York")
         self.now = datetime(2026, 8, 7, 18, 0, tzinfo=self.zone)
 
-    def test_window_keeps_previous_24_hours_and_rest_of_today(self):
+    def test_window_keeps_previous_24_hours_and_next_24_hours(self):
         games = [
             make_game("too-old", self.now - timedelta(hours=25), "final"),
             make_game("recent", self.now - timedelta(hours=23), "final"),
             make_game("later", self.now + timedelta(hours=3)),
             make_game("tomorrow", self.now + timedelta(hours=7)),
+            make_game("too-far", self.now + timedelta(hours=24, minutes=1)),
             make_game("live", self.now - timedelta(hours=30), "live"),
         ]
 
         selected = select_games(games, self.now, 24)
 
         self.assertEqual(
-            {game.game_id for game in selected}, {"recent", "later", "live"}
+            {game.game_id for game in selected}, {"recent", "later", "tomorrow", "live"}
         )
 
     def test_scheduled_mlb_status_has_eastern_time_and_date(self):

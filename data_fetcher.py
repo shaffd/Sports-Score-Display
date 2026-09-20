@@ -331,7 +331,19 @@ class DataFetcher:
             home_score=cls._score(home_raw.get("score")),
             period=int(period) if period is not None else None,
             clock=str(clock) if clock else None,
+            game_type_label=cls._nhl_game_type_label(raw_game),
         )
+
+    @staticmethod
+    def _nhl_game_type_label(raw_game: dict[str, Any]) -> str | None:
+        """Return NHL's own compact playoff series abbreviation when present."""
+        game_type = str(raw_game.get("gameType", ""))
+        if game_type == "1":
+            return "PRE"
+        if game_type != "3":
+            return None
+        series = raw_game.get("seriesStatus") or {}
+        return str(series.get("seriesAbbrev") or "PO").upper()
 
     @staticmethod
     def _nhl_team(raw_team: dict[str, Any]) -> Team:
@@ -421,7 +433,42 @@ class DataFetcher:
                 or None
             ),
             field_position=situation.get("possessionText") or None,
+            game_type_label=cls._nfl_game_type_label(event, competition),
         )
+
+    @staticmethod
+    def _nfl_game_type_label(
+        event: dict[str, Any], competition: dict[str, Any]
+    ) -> str | None:
+        """Map ESPN's season type and playoff headline to a short card label."""
+        season_type = str((event.get("season") or {}).get("type", ""))
+        if season_type == "1":
+            return "PRE"
+        if season_type != "3":
+            return None
+
+        notes = [
+            str(note.get("headline") or "")
+            for note in (
+                *(event.get("notes") or []),
+                *(competition.get("notes") or []),
+            )
+        ]
+        headline = " ".join(notes).upper()
+        conference = next(
+            (name for name in ("AFC", "NFC") if name in headline), ""
+        )
+        if "WILD CARD" in headline:
+            return f"{conference} WC".strip()
+        if "DIVISIONAL" in headline:
+            return f"{conference} DIV".strip()
+        if "CHAMPIONSHIP" in headline:
+            return f"{conference} CH".strip()
+        if "SUPER BOWL" in headline:
+            return "SB"
+        if "PRO BOWL" in headline:
+            return "PB"
+        return "PO"
 
     @staticmethod
     def _nfl_team(raw_team: dict[str, Any]) -> Team:
@@ -497,9 +544,42 @@ class DataFetcher:
             home_score=cls._score(home_raw.get("score")),
             inning=int(inning) if inning is not None else None,
             inning_half=half,
+            game_type_label=cls._mlb_game_type_label(raw_game),
         )
         cls._apply_mlb_linescore(game, linescore)
         return game
+
+    @staticmethod
+    def _mlb_game_type_label(raw_game: dict[str, Any]) -> str | None:
+        """Use MLB's series description to distinguish its playoff rounds."""
+        game_type = str(raw_game.get("gameType", "")).upper()
+        if game_type in {"S", "E"}:
+            return "PRE"
+        if game_type not in {"F", "D", "L", "W"}:
+            return None
+
+        description = " ".join(
+            str(raw_game.get(key) or "")
+            for key in ("description", "seriesDescription")
+        ).upper()
+        if (
+            description.startswith("AL")
+            or " AL " in description
+            or "AMERICAN" in description
+        ):
+            league = "AL"
+        elif (
+            description.startswith("NL")
+            or " NL " in description
+            or "NATIONAL" in description
+        ):
+            league = "NL"
+        else:
+            league = ""
+        suffix = {"F": "WC", "D": "DS", "L": "CS"}.get(game_type)
+        if suffix:
+            return f"{league}{suffix}" if league else suffix
+        return "WS"
 
     @staticmethod
     def _mlb_team(raw_team: dict[str, Any]) -> Team:

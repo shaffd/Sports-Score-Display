@@ -29,6 +29,21 @@ class DataFetcherTests(unittest.TestCase):
         self.assertEqual(game.start_time_utc.tzinfo, timezone.utc)
         self.assertEqual(game.start_time_utc.hour, 0)
 
+    def test_mlb_game_types_use_preseason_and_playoff_round_labels(self):
+        self.assertEqual(DataFetcher._mlb_game_type_label({"gameType": "S"}), "PRE")
+        self.assertEqual(
+            DataFetcher._mlb_game_type_label(
+                {"gameType": "D", "description": "ALDS 'A' Game 1"}
+            ),
+            "ALDS",
+        )
+        self.assertEqual(
+            DataFetcher._mlb_game_type_label(
+                {"gameType": "W", "seriesDescription": "World Series"}
+            ),
+            "WS",
+        )
+
     def test_mlb_live_feed_adds_score_matchup_and_bases(self):
         game = DataFetcher.parse_mlb_game(
             {
@@ -132,6 +147,27 @@ class DataFetcherTests(unittest.TestCase):
         self.assertEqual(game.clock, "4:21")
         self.assertEqual(game.down_distance, "3rd & 4")
         self.assertEqual(game.field_position, "DET 42")
+
+    def test_nfl_game_types_use_season_and_playoff_headline(self):
+        self.assertEqual(
+            DataFetcher._nfl_game_type_label({"season": {"type": 1}}, {}), "PRE"
+        )
+        self.assertEqual(
+            DataFetcher._nfl_game_type_label(
+                {"season": {"type": 3}, "notes": [{"headline": "AFC Wild Card Playoffs"}]},
+                {},
+            ),
+            "AFC WC",
+        )
+
+    def test_nhl_game_types_use_api_series_abbreviation(self):
+        self.assertEqual(DataFetcher._nhl_game_type_label({"gameType": 1}), "PRE")
+        self.assertEqual(
+            DataFetcher._nhl_game_type_label(
+                {"gameType": 3, "seriesStatus": {"seriesAbbrev": "SCF"}}
+            ),
+            "SCF",
+        )
 
     def test_nhl_parser_uses_current_score_and_period(self):
         raw = {

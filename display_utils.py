@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from config import AppConfig
@@ -42,12 +42,11 @@ def card_display_seconds(card: DisplayCard, config: AppConfig) -> float:
 
 
 def display_window(now: datetime, lookback_hours: int) -> tuple[datetime, datetime]:
-    """Return [now-lookback, next local midnight)."""
+    """Return the recent-games lookback plus the next 24 hours."""
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     start = now - timedelta(hours=lookback_hours)
-    tomorrow = now.date() + timedelta(days=1)
-    end = datetime.combine(tomorrow, time.min, tzinfo=now.tzinfo)
+    end = now + timedelta(hours=24)
     return start, end
 
 

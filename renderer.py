@@ -64,6 +64,7 @@ class FrameLayout:
     """Vertical regions used by a single game card."""
 
     header: Region
+    game_type: Region | None
     logos: Region
     scores: Region
     logo_max_width: int
@@ -261,16 +262,20 @@ class ScoreRenderer:
         )
 
     def _layout_for(self, game: Game) -> FrameLayout:
-        del game
         header_height = min(self.height, self._scaled_rows(HEADER_ROWS))
         header = Region(0, 0, self.width, header_height)
         logos = Region(0, header.bottom, self.width, self.height)
+        game_type = None
         scores = logos
+        if game.game_type_label:
+            game_type_height = min(logos.height, self._scaled_rows(6))
+            game_type = Region(0, logos.top, self.width, logos.top + game_type_height)
+            scores = Region(0, game_type.bottom, self.width, self.height)
         logo_max_width = max(
             1,
             (self.width * LOGO_MAX_WIDTH + REFERENCE_WIDTH // 2) // REFERENCE_WIDTH,
         )
-        return FrameLayout(header, logos, scores, logo_max_width)
+        return FrameLayout(header, game_type, logos, scores, logo_max_width)
 
     def _render_title(self, draw: ImageDraw.ImageDraw, title: str) -> None:
         text = title.upper()
@@ -375,6 +380,9 @@ class ScoreRenderer:
         elif game.status == "scheduled":
             self._draw_upcoming_marker(draw, layout.scores)
 
+        if layout.game_type is not None:
+            self._draw_game_type(draw, game.game_type_label or "", layout.game_type)
+
         # The header is always drawn last and never overlaps the logo region.
         self._draw_game_header(draw, game, layout.header)
 
@@ -394,6 +402,22 @@ class ScoreRenderer:
                 half = ""
             return f"{half}{game.inning or ''}" or "LIVE"
         return "LIVE"
+
+    def _draw_game_type(
+        self,
+        draw: ImageDraw.ImageDraw,
+        label: str,
+        region: Region,
+    ) -> None:
+        """Draw the compact non-regular-season marker above scores or @."""
+        text = label.upper()
+        font = self._fitted_font(
+            text,
+            max_width=max(1, self.width - 8),
+            preferred_size=region.height,
+            max_height=region.height,
+        )
+        self._draw_text_in_region(draw, text, region, font, backplate=True)
 
     def _draw_team_logo(
         self,
@@ -659,6 +683,11 @@ class ScoreRenderer:
     def _mlb_bases_center(self, layout: FrameLayout) -> tuple[int, int]:
         """Put the diamond below the header but above the score baseline."""
         offset = max(self._scaled_rows(4), layout.logos.height // 6)
+        if layout.game_type is not None:
+            return (
+                self.width // 2,
+                min(layout.scores.bottom - 1, layout.scores.top + offset // 2),
+            )
         return (self.width // 2, min(layout.logos.bottom - 1, layout.logos.top + offset))
 
     def _draw_upcoming_marker(
