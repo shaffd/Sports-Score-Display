@@ -66,7 +66,7 @@ class MatrixConfig:
     row_address_type: int = 0
     pixel_mapper_config: str = ""
     panel_type: str = ""
-    led_rgb_sequence: str = "RGB"
+    led_rgb_sequence: str = "RBG"
     show_refresh_rate: bool = False
     drop_privileges: bool = True
 
@@ -204,7 +204,7 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         row_address_type=int(matrix_raw.get("row_address_type", 0)),
         pixel_mapper_config=str(matrix_raw.get("pixel_mapper_config", "")),
         panel_type=str(matrix_raw.get("panel_type", "")),
-        led_rgb_sequence=str(matrix_raw.get("led_rgb_sequence", "RGB")),
+        led_rgb_sequence=str(matrix_raw.get("led_rgb_sequence", "RBG")),
         show_refresh_rate=bool(matrix_raw.get("show_refresh_rate", False)),
         drop_privileges=bool(matrix_raw.get("drop_privileges", True)),
     )

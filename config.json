@@ -59,7 +59,7 @@
     "row_address_type": 0,
     "pixel_mapper_config": "",
     "panel_type": "",
-    "led_rgb_sequence": "RGB",
+    "led_rgb_sequence": "RBG",
     "show_refresh_rate": false,
     "drop_privileges": true
   }
