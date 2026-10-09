@@ -326,6 +326,41 @@ class RendererTests(unittest.TestCase):
         self.assertIsNotNone(bounds)
         self.assertLessEqual(abs((bounds[0] + bounds[2]) - 64), 1)
 
+    def test_series_wins_flank_round_at_the_team_score_centers(self):
+        renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
+        image = Image.new("RGB", (64, 32))
+        region = Region(0, 7, 64, 13)
+
+        renderer._draw_game_type(
+            ImageDraw.Draw(image),
+            "NLDS",
+            region,
+            away_series_wins=1,
+            home_series_wins=2,
+        )
+
+        away_center, home_center = renderer._score_centers()
+        self.assertIsNotNone(
+            image.crop((away_center - 2, region.top, away_center + 2, region.bottom)).getbbox()
+        )
+        self.assertIsNotNone(
+            image.crop((28, region.top, 36, region.bottom)).getbbox()
+        )
+        self.assertIsNotNone(
+            image.crop((home_center - 2, region.top, home_center + 2, region.bottom)).getbbox()
+        )
+
+    def test_nfl_playoff_round_does_not_invent_series_wins(self):
+        renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
+        game = self._live_nfl_game()
+        game.game_type_label = "AFC WC"
+
+        self.assertIsNone(game.away_series_wins)
+        self.assertIsNone(game.home_series_wins)
+
+        image = renderer.render(DisplayCard(type="game", game=game))
+        self.assertIsNotNone(image.getbbox())
+
     def test_mlb_outs_uses_the_compact_rounded_o_distinct_from_zero(self):
         renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
         font = renderer._font(5)

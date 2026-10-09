@@ -287,7 +287,13 @@ class ScoreRenderer:
             self._draw_upcoming_marker(draw, layout.scores)
 
         if layout.game_type is not None:
-            self._draw_game_type(draw, game.game_type_label or "", layout.game_type)
+            self._draw_game_type(
+                draw,
+                game.game_type_label or "",
+                layout.game_type,
+                away_series_wins=game.away_series_wins,
+                home_series_wins=game.home_series_wins,
+            )
 
         # The header is always drawn last and never overlaps the logo region.
         self._draw_game_header(draw, game, layout.header)
@@ -314,8 +320,11 @@ class ScoreRenderer:
         draw: ImageDraw.ImageDraw,
         label: str,
         region: Region,
+        *,
+        away_series_wins: int | None = None,
+        home_series_wins: int | None = None,
     ) -> None:
-        """Draw the compact non-regular-season marker above scores or @."""
+        """Draw the round, flanked by each team's best-of-series wins."""
         text = label.upper()
         font = self._fitted_font(
             text,
@@ -324,6 +333,34 @@ class ScoreRenderer:
             max_height=region.height,
         )
         self._draw_text_in_region(draw, text, region, font, backplate=True)
+
+        if away_series_wins is None and home_series_wins is None:
+            return
+
+        series_font = self._fitted_font(
+            "8",
+            max_width=max(3, region.width // 12),
+            preferred_size=region.height,
+            max_height=region.height,
+        )
+        away_center, home_center = self._score_centers()
+        center_y = region.top + region.height // 2
+        if away_series_wins is not None:
+            self._draw_text_at_center(
+                draw,
+                str(away_series_wins),
+                (away_center, center_y),
+                series_font,
+                backplate=True,
+            )
+        if home_series_wins is not None:
+            self._draw_text_at_center(
+                draw,
+                str(home_series_wins),
+                (home_center, center_y),
+                series_font,
+                backplate=True,
+            )
 
     def _draw_team_logo(
         self,

@@ -43,6 +43,30 @@ class DataFetcherTests(unittest.TestCase):
             "WS",
         )
 
+    def test_mlb_parser_maps_postseason_series_wins_to_away_and_home(self):
+        game = DataFetcher.parse_mlb_game(
+            {
+                "gamePk": 789,
+                "gameDate": "2026-10-09T23:00:00Z",
+                "gameType": "D",
+                "description": "NLDS 'A' Game 4",
+                "status": {"abstractGameState": "Preview"},
+                "teams": {
+                    "away": {
+                        "team": {"name": "Away", "abbreviation": "AWY"},
+                        "leagueRecord": {"wins": 1, "losses": 2},
+                    },
+                    "home": {
+                        "team": {"name": "Home", "abbreviation": "HOM"},
+                        "leagueRecord": {"wins": 2, "losses": 1},
+                    },
+                },
+            }
+        )
+
+        self.assertEqual(game.game_type_label, "NLDS")
+        self.assertEqual((game.away_series_wins, game.home_series_wins), (1, 2))
+
     def test_mlb_live_feed_adds_score_matchup_and_bases(self):
         game = DataFetcher.parse_mlb_game(
             {
@@ -167,6 +191,34 @@ class DataFetcherTests(unittest.TestCase):
             ),
             "SCF",
         )
+
+    def test_nhl_parser_maps_seed_series_wins_to_away_and_home(self):
+        game = DataFetcher.parse_nhl_game(
+            {
+                "id": 654,
+                "startTimeUTC": "2026-05-20T23:00:00Z",
+                "gameType": 3,
+                "gameState": "FUT",
+                "awayTeam": {
+                    "name": {"default": "Lower Seed"},
+                    "abbrev": "LOW",
+                },
+                "homeTeam": {
+                    "name": {"default": "Top Seed"},
+                    "abbrev": "TOP",
+                },
+                "seriesStatus": {
+                    "seriesAbbrev": "ECF",
+                    "topSeedTeamAbbrev": "TOP",
+                    "topSeedWins": 2,
+                    "bottomSeedTeamAbbrev": "LOW",
+                    "bottomSeedWins": 1,
+                },
+            }
+        )
+
+        self.assertEqual(game.game_type_label, "ECF")
+        self.assertEqual((game.away_series_wins, game.home_series_wins), (1, 2))
 
     def test_nhl_parser_uses_current_score_and_period(self):
         raw = {

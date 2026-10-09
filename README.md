@@ -16,6 +16,8 @@ images either to a Tkinter development preview or an HZeller HUB75 LED matrix.
 - Scheduled games with Eastern time and `MM/DD`.
 - Compact non-regular-season markers: `PRE` for preseason and API-derived
   playoff rounds such as `ALDS`, `R2`, `SCF`, and `AFC WC`.
+- MLB and NHL playoff cards flank that round marker with the current away-team
+  and home-team series wins. NFL playoff cards keep the round marker alone.
 - Prominent away and home logos, labeled `A`/`H`, with a clear center gap.
   Only their outer edges may be cropped, never by more than one-third.
 - Final and live scores separated by a short dash; upcoming matchups use `@`.
