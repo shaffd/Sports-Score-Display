@@ -319,19 +319,27 @@ class DataFetcher:
         home_raw = raw_game.get("homeTeam", {})
         period = raw_game.get("periodDescriptor", {}).get("number")
         clock = raw_game.get("clock", {}).get("timeRemaining")
+        away = cls._nhl_team(away_raw)
+        home = cls._nhl_team(home_raw)
 
         return Game(
             sport="NHL",
             game_id=str(raw_game.get("id", "")),
             start_time_utc=cls._parse_utc(raw_game["startTimeUTC"]),
             status=status,
-            away=cls._nhl_team(away_raw),
-            home=cls._nhl_team(home_raw),
+            away=away,
+            home=home,
             away_score=cls._score(away_raw.get("score")),
             home_score=cls._score(home_raw.get("score")),
             period=int(period) if period is not None else None,
             clock=str(clock) if clock else None,
             game_type_label=cls._nhl_game_type_label(raw_game),
+            away_series_wins=cls._nhl_series_wins(
+                raw_game, away.abbreviation
+            ),
+            home_series_wins=cls._nhl_series_wins(
+                raw_game, home.abbreviation
+            ),
         )
 
     @staticmethod
@@ -344,6 +352,22 @@ class DataFetcher:
             return None
         series = raw_game.get("seriesStatus") or {}
         return str(series.get("seriesAbbrev") or "PO").upper()
+
+    @classmethod
+    def _nhl_series_wins(
+        cls, raw_game: dict[str, Any], team_abbreviation: str
+    ) -> int | None:
+        """Map NHL seed-based series wins to the card's away/home teams."""
+        if str(raw_game.get("gameType", "")) != "3":
+            return None
+
+        series = raw_game.get("seriesStatus") or {}
+        abbreviation = team_abbreviation.upper()
+        if abbreviation == str(series.get("topSeedTeamAbbrev") or "").upper():
+            return cls._score(series.get("topSeedWins"))
+        if abbreviation == str(series.get("bottomSeedTeamAbbrev") or "").upper():
+            return cls._score(series.get("bottomSeedWins"))
+        return None
 
     @staticmethod
     def _nhl_team(raw_team: dict[str, Any]) -> Team:
@@ -545,6 +569,8 @@ class DataFetcher:
             inning=int(inning) if inning is not None else None,
             inning_half=half,
             game_type_label=cls._mlb_game_type_label(raw_game),
+            away_series_wins=cls._mlb_series_wins(raw_game, away_raw),
+            home_series_wins=cls._mlb_series_wins(raw_game, home_raw),
         )
         cls._apply_mlb_linescore(game, linescore)
         return game
@@ -580,6 +606,15 @@ class DataFetcher:
         if suffix:
             return f"{league}{suffix}" if league else suffix
         return "WS"
+
+    @classmethod
+    def _mlb_series_wins(
+        cls, raw_game: dict[str, Any], team_entry: dict[str, Any]
+    ) -> int | None:
+        """Return MLB's current wins for this postseason matchup."""
+        if str(raw_game.get("gameType", "")).upper() not in {"F", "D", "L", "W"}:
+            return None
+        return cls._score((team_entry.get("leagueRecord") or {}).get("wins"))
 
     @staticmethod
     def _mlb_team(raw_team: dict[str, Any]) -> Team:

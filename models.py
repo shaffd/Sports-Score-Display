@@ -35,6 +35,10 @@ class Game:
     # Blank during the regular season; otherwise a compact API-derived label
     # such as PRE, ALDS, R2, or AFC WC.
     game_type_label: str | None = None
+    # Current best-of-series wins, mapped to the teams' away/home positions.
+    # These remain blank for preseason, regular-season, and NFL games.
+    away_series_wins: int | None = None
+    home_series_wins: int | None = None
 
     # NFL/NHL live fields
     period: int | None = None
