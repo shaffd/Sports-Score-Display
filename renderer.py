@@ -28,6 +28,7 @@ MAX_LOGO_OUTER_CROP_DENOMINATOR = 3
 SCORE_SLOT_WIDTH = 15
 SCORE_CENTER_OFFSET = 11
 SCORE_MAX_HEIGHT = 10
+SERIES_SCORE_GAP = 2
 LOGO_ALPHA_THRESHOLD = 128
 TEXT_MASK_THRESHOLD = 128
 LEAGUE_LOGO_MAX_WIDTH = 60
@@ -426,7 +427,9 @@ class ScoreRenderer:
             preferred_size=region.height,
             max_height=region.height,
         )
-        self._draw_text_in_region(draw, text, region, font, backplate=True)
+        label_mask = self._rasterize_text(text, font)
+        label_xy = region.centered_origin(label_mask.size)
+        self._draw_mask(draw, label_xy, label_mask, backplate=True)
 
         if away_series_wins is None and home_series_wins is None:
             return
@@ -437,22 +440,30 @@ class ScoreRenderer:
             preferred_size=region.height,
             max_height=region.height,
         )
-        away_center, home_center = self._score_centers()
-        center_y = region.top + region.height // 2
+        series_gap = max(
+            1,
+            (self.width * SERIES_SCORE_GAP) // REFERENCE_WIDTH,
+        )
         if away_series_wins is not None:
-            self._draw_text_at_center(
+            away_mask = self._rasterize_text(str(away_series_wins), series_font)
+            self._draw_mask(
                 draw,
-                str(away_series_wins),
-                (away_center, center_y),
-                series_font,
+                (
+                    label_xy[0] - series_gap - away_mask.width,
+                    region.top + (region.height - away_mask.height) // 2,
+                ),
+                away_mask,
                 backplate=True,
             )
         if home_series_wins is not None:
-            self._draw_text_at_center(
+            home_mask = self._rasterize_text(str(home_series_wins), series_font)
+            self._draw_mask(
                 draw,
-                str(home_series_wins),
-                (home_center, center_y),
-                series_font,
+                (
+                    label_xy[0] + label_mask.width + series_gap,
+                    region.top + (region.height - home_mask.height) // 2,
+                ),
+                home_mask,
                 backplate=True,
             )
 

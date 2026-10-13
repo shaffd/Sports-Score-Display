@@ -7,7 +7,13 @@ from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw
 
 from models import DisplayCard, FantasyPlayer, Game, Team
-from renderer import Region, ScoreRenderer, TEAM_LABEL_COLOR, WHITE
+from renderer import (
+    Region,
+    SERIES_SCORE_GAP,
+    ScoreRenderer,
+    TEAM_LABEL_COLOR,
+    WHITE,
+)
 
 
 class RendererTests(unittest.TestCase):
@@ -365,29 +371,74 @@ class RendererTests(unittest.TestCase):
         self.assertIsNotNone(bounds)
         self.assertLessEqual(abs((bounds[0] + bounds[2]) - 64), 1)
 
-    def test_series_wins_flank_round_at_the_team_score_centers(self):
+    def test_series_wins_have_equal_gaps_around_variable_width_rounds(self):
         renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
-        image = Image.new("RGB", (64, 32))
         region = Region(0, 7, 64, 13)
 
-        renderer._draw_game_type(
-            ImageDraw.Draw(image),
-            "NLDS",
-            region,
-            away_series_wins=1,
-            home_series_wins=2,
-        )
+        for label in ("ALDS", "NLDS", "WCF", "ECF", "SCF", "WS"):
+            with self.subTest(label=label):
+                image = Image.new("RGB", (64, 32))
+                renderer._draw_game_type(
+                    ImageDraw.Draw(image),
+                    label,
+                    region,
+                    away_series_wins=1,
+                    home_series_wins=2,
+                )
 
-        away_center, home_center = renderer._score_centers()
-        self.assertIsNotNone(
-            image.crop((away_center - 2, region.top, away_center + 2, region.bottom)).getbbox()
-        )
-        self.assertIsNotNone(
-            image.crop((28, region.top, 36, region.bottom)).getbbox()
-        )
-        self.assertIsNotNone(
-            image.crop((home_center - 2, region.top, home_center + 2, region.bottom)).getbbox()
-        )
+                font = renderer._fitted_font(
+                    label,
+                    max_width=renderer.width - 8,
+                    preferred_size=region.height,
+                    max_height=region.height,
+                )
+                label_mask = renderer._rasterize_text(label, font)
+                label_left, _ = region.centered_origin(label_mask.size)
+                label_right = label_left + label_mask.width
+                series_font = renderer._fitted_font(
+                    "8",
+                    max_width=max(3, region.width // 12),
+                    preferred_size=region.height,
+                    max_height=region.height,
+                )
+                score_width = renderer._rasterize_text("1", series_font).width
+
+                away_gap = image.crop(
+                    (
+                        label_left - SERIES_SCORE_GAP,
+                        region.top,
+                        label_left,
+                        region.bottom,
+                    )
+                )
+                home_gap = image.crop(
+                    (
+                        label_right,
+                        region.top,
+                        label_right + SERIES_SCORE_GAP,
+                        region.bottom,
+                    )
+                )
+                away_score = image.crop(
+                    (
+                        label_left - SERIES_SCORE_GAP - score_width,
+                        region.top,
+                        label_left - SERIES_SCORE_GAP,
+                        region.bottom,
+                    )
+                )
+                home_score = image.crop(
+                    (
+                        label_right + SERIES_SCORE_GAP,
+                        region.top,
+                        label_right + SERIES_SCORE_GAP + score_width,
+                        region.bottom,
+                    )
+                )
+                self.assertIsNone(away_gap.getbbox())
+                self.assertIsNone(home_gap.getbbox())
+                self.assertIsNotNone(away_score.getbbox())
+                self.assertIsNotNone(home_score.getbbox())
 
     def test_nfl_playoff_round_does_not_invent_series_wins(self):
         renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
