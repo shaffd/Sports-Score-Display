@@ -1,0 +1,21 @@
+[Unit]
+Description=GameBlink local Wi-Fi setup portal
+Wants=NetworkManager.service
+After=NetworkManager.service network.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+Environment=GAMEBLINK_HOTSPOT_PASSWORD=GAMEBLINK
+ExecStart=/usr/bin/python3 /usr/local/lib/gameblink/wifi_setup.py
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=gameblink-wifi
+RuntimeDirectoryMode=0755
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/gameblink-wifi
+
+[Install]
+WantedBy=multi-user.target

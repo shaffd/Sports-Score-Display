@@ -66,11 +66,14 @@ only when preview mode starts, so it is not required by a headless matrix setup.
 The preview enlarges the logical frame with nearest-neighbor scaling, so every
 64x32 source pixel appears as a sharp square instead of being smoothed.
 
-## Raspberry Pi Zero 2 W and HZeller
+## Raspberry Pi 3 Model A+, Zero 2 W, and HZeller
 
-The current HZeller project supports the Pi Zero 2 W and provides Python
-bindings. `setup_pi.sh` installs its build dependencies and installs the binding
-directly from the official repository.
+The current HZeller project supports both the Pi 3 Model A+ and Pi Zero 2 W and
+provides Python bindings. `setup_pi.sh` installs its build dependencies and
+installs the binding directly from the official repository. The Pi 3 Model A+
+uses the same 40-pin GPIO interface for the matrix adapter and also adds 5 GHz
+Wi-Fi support. Its larger board, full-size HDMI port, and 2.5 A power
+recommendation may require different enclosure and cable planning.
 
 ```bash
 bash setup_pi.sh
@@ -84,6 +87,73 @@ it efficiently to the matrix.
 The driver generally needs root privileges for accurate timing. Read HZeller's
 wiring and safety documentation before connecting or powering a panel:
 https://github.com/hzeller/rpi-rgb-led-matrix
+
+## Friend-friendly Wi-Fi setup
+
+`setup_pi.sh` also installs and starts a local GameBlink Wi-Fi setup service.
+The setup page is stored and served by the Raspberry Pi itself; it does not use
+paid hosting or require Internet access.
+
+At boot, a new display with no saved home Wi-Fi profiles waits 30 seconds before
+starting setup mode. If that fails, the display rotates these instructions:
+
+```text
+WIFI SETUP
+JOIN
+GameBlink-XXXX
+PASSWORD
+GAMEBLINK
+OPEN
+10.42.0.1
+```
+
+The four-character suffix comes from that Pi's Wi-Fi address, so nearby
+GameBlink displays remain distinguishable. On a phone or laptop:
+
+1. Join the displayed `GameBlink-XXXX` network using password `GAMEBLINK`.
+2. Open `http://10.42.0.1` if the setup page does not appear automatically.
+3. Select the home network, enter its password, and choose **Connect GameBlink**.
+
+The phone disconnects from the temporary network while the Pi tries the new
+credentials. A successful connection is saved by NetworkManager and reconnects
+automatically on later boots. If the password is wrong or the network cannot be
+reached, the temporary GameBlink network and setup page return automatically.
+If at least one home Wi-Fi profile has previously been saved, GameBlink gives
+NetworkManager three minutes to recover before returning to setup mode. While
+setup mode is active it retries saved networks every minute, allowing it to
+recover from a temporary router outage without user action. Before handing a
+tested unit to a friend, remove your own saved Wi-Fi profile so their first boot
+uses the shorter 30-second path.
+
+The portal supports ordinary open and WPA/WPA2/WPA3 personal networks. It does
+not configure enterprise Wi-Fi networks that require a username, certificate,
+or browser sign-in. The Pi Zero 2 W also requires a 2.4 GHz-capable network.
+
+Useful service commands on the Pi:
+
+```bash
+sudo systemctl status gameblink-wifi.service
+sudo journalctl -u gameblink-wifi.service -f
+sudo systemctl restart gameblink-wifi.service
+```
+
+To test setup mode from an existing SSH session, run:
+
+```bash
+sudo touch /run/gameblink-wifi/force-setup
+```
+
+Within ten seconds the SSH connection will close because the Pi's single Wi-Fi
+radio has switched from the home network to `GameBlink-XXXX`. Join that network
+with password `GAMEBLINK`, then open `http://10.42.0.1`. Selecting your normal
+home network returns the Pi to it. If a test goes wrong, rebooting clears the
+runtime trigger and NetworkManager gets another chance to use the previously
+saved home connection before setup mode returns.
+
+The setup-hotspot password can be changed by overriding
+`GAMEBLINK_HOTSPOT_PASSWORD` in the systemd service. It must contain at least
+eight characters. It is normalized to uppercase so the password shown by the
+LED display exactly matches the case-sensitive hotspot password.
 
 ## Configuration
 

@@ -14,6 +14,7 @@ from display_utils import build_cards, card_display_seconds, display_window
 from models import DisplayCard
 from outputs import DisplayClosed, create_output
 from renderer import ScoreRenderer
+from wifi_status import wifi_setup_cards
 
 
 LOGGER = logging.getLogger(__name__)
@@ -38,6 +39,21 @@ class ScoreDisplayApp:
 
     def refresh(self, preferred_card_key: str | None = None) -> bool:
         """Refresh cards and retain a requested card when it is still available."""
+        setup_cards = wifi_setup_cards()
+        if setup_cards is not None:
+            previous_key = preferred_card_key
+            if previous_key is None and self.cards:
+                previous_key = self.cards[self.index].key
+            self.cards = setup_cards
+            self.index = 0
+            if previous_key is not None:
+                for index, card in enumerate(self.cards):
+                    if card.key == previous_key:
+                        self.index = index
+                        return True
+            LOGGER.info("Showing GameBlink Wi-Fi setup instructions")
+            return False
+
         if preferred_card_key is None and self.cards:
             preferred_card_key = self.cards[self.index].key
 
