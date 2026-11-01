@@ -328,9 +328,29 @@ class ScoreRenderer:
             (region.left, region.top, region.right - 1, region.bottom - 1),
             fill=BLACK,
         )
-        font = _PixelFont(scale=1, letter_spacing=0)
-        text = self._trim_to_width(draw, label.upper(), font, region.width)
+        font = _PixelFont(scale=1, letter_spacing=1)
+        text = self._footer_text(label, region.width, font)
         self._draw_text_in_region(draw, text, region, font)
+
+    def _footer_text(
+        self,
+        label: str,
+        max_width: int,
+        font: _PixelFont | None = None,
+    ) -> str:
+        """Keep normal letter spacing, abbreviating Varsity only if needed."""
+        footer_font = font or _PixelFont(scale=1, letter_spacing=1)
+        text = label.upper()
+        if self._text_size(None, text, footer_font)[0] <= max_width:
+            return text
+        if text.startswith("VARSITY "):
+            text = f"V {text[len('VARSITY '):]}"
+        return self._trim_to_width(
+            ImageDraw.Draw(Image.new("RGB", (1, 1))),
+            text,
+            footer_font,
+            max_width,
+        )
 
     def _header_status(self, game: Game) -> str:
         if game.status != "live":

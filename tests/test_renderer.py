@@ -318,7 +318,7 @@ class RendererTests(unittest.TestCase):
         self.assertIsNotNone(marker_bounds)
         self.assertEqual(image.getpixel((32, center_y)), WHITE)
 
-    def test_myhsal_footer_is_at_bottom_and_preserves_full_label(self):
+    def test_myhsal_footer_is_at_bottom_with_readable_spacing(self):
         renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))
         game = self._live_game()
         game.sport = "MYHSAL"
@@ -331,6 +331,15 @@ class RendererTests(unittest.TestCase):
         self.assertEqual((layout.footer.top, layout.footer.bottom), (26, 32))
         footer_bounds = image.crop((0, 26, 64, 32)).getbbox()
         self.assertIsNotNone(footer_bounds)
+        self.assertEqual(renderer._footer_text("JV Hockey", 64), "JV HOCKEY")
+        self.assertEqual(
+            renderer._footer_text("Varsity Hockey", 64),
+            "VARSITY HOCKEY",
+        )
+        self.assertEqual(
+            renderer._footer_text("Varsity Basketball", 64),
+            "V BASKETBALL",
+        )
 
     def test_game_type_is_centered_above_a_scheduled_game_marker(self):
         renderer = ScoreRenderer(64, 32, ZoneInfo("America/New_York"))

@@ -71,8 +71,8 @@ class AppConfig:
     timezone: str = "America/New_York"
     lookback_hours: int = 24
     refresh_seconds: int = 30
-    card_seconds: float = 5.0
-    favorite_live_card_seconds: float = 180.0
+    card_seconds: float = 7.0
+    favorite_live_card_seconds: float = 7.0
     favorite_teams: tuple[tuple[str, str], ...] = DEFAULT_FAVORITE_TEAMS
     api_timeout_seconds: float = 10.0
     sports: tuple[str, ...] = SUPPORTED_SPORTS
@@ -191,9 +191,9 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         timezone=str(raw.get("timezone", "America/New_York")),
         lookback_hours=int(raw.get("lookback_hours", 24)),
         refresh_seconds=int(raw.get("refresh_seconds", 30)),
-        card_seconds=float(raw.get("card_seconds", 5.0)),
+        card_seconds=float(raw.get("card_seconds", 7.0)),
         favorite_live_card_seconds=float(
-            raw.get("favorite_live_card_seconds", 180.0)
+            raw.get("favorite_live_card_seconds", 7.0)
         ),
         favorite_teams=_favorite_teams(favorite_teams_raw),
         api_timeout_seconds=float(raw.get("api_timeout_seconds", 10.0)),

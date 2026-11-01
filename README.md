@@ -17,8 +17,7 @@ HZeller HUB75 LED matrix.
   bottom of each game card.
 - Live scores refreshed independently from the card rotation interval.
 - Centered NHL, NFL, and MLB league marks on the league title cards.
-- Live Yankees, Rangers, and Lions games dwell for three minutes on each pass;
-  every other card uses the normal five-second dwell.
+- Every title, game, and message card displays for seven seconds.
 - Final scores with `FINAL MM/DD`.
 - Scheduled games with Eastern time and `MM/DD`.
 - Compact non-regular-season markers: `PRE` for preseason and API-derived
@@ -173,13 +172,9 @@ separate so a laptop preview can model any future display.
   "timezone": "America/New_York",
   "lookback_hours": 24,
   "refresh_seconds": 30,
-  "card_seconds": 5,
-  "favorite_live_card_seconds": 180,
-  "favorite_teams": {
-    "MLB": ["NYY"],
-    "NHL": ["NYR"],
-    "NFL": ["DET"]
-  },
+  "card_seconds": 7,
+  "favorite_live_card_seconds": 7,
+  "favorite_teams": {},
   "sports": ["NHL", "NFL", "MLB", "MYHSAL"],
   "myhsal": {
     "school_slug": "tabc",
@@ -215,11 +210,9 @@ pixel mapping.
 Bonnet's stock wiring. HZeller documents `adafruit-hat-pwm` only for boards with
 the optional GPIO 4-to-18 anti-flicker hardware modification.
 
-Favorite teams are configured by league and abbreviation so an abbreviation
-used in another sport cannot accidentally receive the longer dwell. The live
-favorite card is re-rendered after every data refresh while its three-minute
-dwell remains active, keeping NHL and NFL clocks and scores current in both
-preview and matrix output modes.
+The checked-in configuration leaves `favorite_teams` empty and gives the
+favorite-live setting the same seven-second value, so no team receives a longer
+dwell than another.
 
 ## Team logos
 
