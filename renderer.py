@@ -67,6 +67,7 @@ class FrameLayout:
     game_type: Region | None
     logos: Region
     scores: Region
+    footer: Region | None
     logo_max_width: int
 
 
@@ -171,7 +172,21 @@ class ScoreRenderer:
     def _layout_for(self, game: Game) -> FrameLayout:
         header_height = min(self.height, self._scaled_rows(HEADER_ROWS))
         header = Region(0, 0, self.width, header_height)
-        logos = Region(0, header.bottom, self.width, self.height)
+        footer = None
+        content_bottom = self.height
+        if game.footer_label:
+            footer_height = min(
+                max(0, self.height - header.bottom),
+                self._scaled_rows(6),
+            )
+            footer = Region(
+                0,
+                self.height - footer_height,
+                self.width,
+                self.height,
+            )
+            content_bottom = footer.top
+        logos = Region(0, header.bottom, self.width, content_bottom)
         game_type = None
         scores = logos
         if game.game_type_label:
@@ -182,7 +197,7 @@ class ScoreRenderer:
             1,
             (self.width * LOGO_MAX_WIDTH + REFERENCE_WIDTH // 2) // REFERENCE_WIDTH,
         )
-        return FrameLayout(header, game_type, logos, scores, logo_max_width)
+        return FrameLayout(header, game_type, logos, scores, footer, logo_max_width)
 
     def _render_title(self, draw: ImageDraw.ImageDraw, title: str) -> None:
         text = title.upper()
@@ -233,13 +248,13 @@ class ScoreRenderer:
         # marks.  The only allowed crop is on the panel's outside edges.
         away_logo = self._load_logo(
             game.sport,
-            game.away.abbreviation,
+            game.away.logo_key or game.away.abbreviation,
             layout.logo_max_width,
             layout.logos.height,
         )
         home_logo = self._load_logo(
             game.sport,
-            game.home.abbreviation,
+            game.home.logo_key or game.home.abbreviation,
             layout.logo_max_width,
             layout.logos.height,
         )
@@ -296,8 +311,26 @@ class ScoreRenderer:
                 home_series_wins=game.home_series_wins,
             )
 
+        if layout.footer is not None:
+            self._draw_footer(draw, game.footer_label or "", layout.footer)
+
         # The header is always drawn last and never overlaps the logo region.
         self._draw_game_header(draw, game, layout.header)
+
+    def _draw_footer(
+        self,
+        draw: ImageDraw.ImageDraw,
+        label: str,
+        region: Region,
+    ) -> None:
+        """Draw a full MYHSAL division label in the bottom six rows."""
+        draw.rectangle(
+            (region.left, region.top, region.right - 1, region.bottom - 1),
+            fill=BLACK,
+        )
+        font = _PixelFont(scale=1, letter_spacing=0)
+        text = self._trim_to_width(draw, label.upper(), font, region.width)
+        self._draw_text_in_region(draw, text, region, font)
 
     def _header_status(self, game: Game) -> str:
         if game.status != "live":

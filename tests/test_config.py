@@ -16,6 +16,13 @@ class ConfigTests(unittest.TestCase):
             set(config.favorite_teams),
             {("MLB", "NYY"), ("NHL", "NYR"), ("NFL", "DET")},
         )
+        self.assertIn("MYHSAL", config.sports)
+        self.assertEqual(config.myhsal.school_slug, "tabc")
+        self.assertEqual(config.myhsal.title, "MYHSAL - TABC")
+        self.assertEqual(
+            (config.myhsal.past_days, config.myhsal.upcoming_days),
+            (3, 7),
+        )
 
 
 if __name__ == "__main__":

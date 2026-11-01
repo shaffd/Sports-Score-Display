@@ -7,6 +7,7 @@ Logos/
   MLB/NYY.png
   NFL/DET.png
   NHL/NYR.png
+  MYHSAL/TABC.png
 ```
 
 League title-card marks live separately from team marks:
@@ -27,3 +28,7 @@ keeps a visible center gap between the away and home marks. For especially wide
 pairs, it crops only their outer edges, never by more than one-third.
 If a PNG is missing, the display uses the team's abbreviation so games remain
 readable.
+
+MYHSAL filenames use the site's team slug normalized to uppercase underscores.
+Run `python tools/download_myhsal_logos.py` to rediscover the configured
+school's divisions and refresh every team logo used by those divisions.

@@ -10,7 +10,13 @@
     "NFL": ["DET"]
   },
   "api_timeout_seconds": 10,
-  "sports": ["NHL", "NFL", "MLB"],
+  "sports": ["NHL", "NFL", "MLB", "MYHSAL"],
+  "myhsal": {
+    "school_slug": "tabc",
+    "school_name": "TABC",
+    "past_days": 3,
+    "upcoming_days": 7
+  },
   "show_sport_headers": true,
   "output": "preview",
   "preview_scale": 8,

@@ -18,6 +18,9 @@ class Team:
     name: str
     abbreviation: str
     logo_url: str | None = None
+    # Optional filesystem-safe key when the display name is not a suitable
+    # logo filename (for example, "NORTH SHORE").
+    logo_key: str | None = None
 
 
 @dataclass(slots=True)
@@ -30,8 +33,8 @@ class Game:
     status: GameStatus
     away: Team
     home: Team
-    away_score: int | None = None
-    home_score: int | None = None
+    away_score: int | str | None = None
+    home_score: int | str | None = None
     # Blank during the regular season; otherwise a compact API-derived label
     # such as PRE, ALDS, R2, or AFC WC.
     game_type_label: str | None = None
@@ -39,6 +42,11 @@ class Game:
     # These remain blank for preseason, regular-season, and NFL games.
     away_series_wins: int | None = None
     home_series_wins: int | None = None
+    # School-league cards use a bottom label such as "Varsity Hockey".
+    footer_label: str | None = None
+    # Used when MYHSAL publishes a dated game without a clock time (for
+    # example, the second game of a doubleheader).
+    scheduled_label: str | None = None
 
     # NFL/NHL live fields
     period: int | None = None

@@ -25,7 +25,11 @@ class ScoreDisplayApp:
 
     def __init__(self, config: AppConfig) -> None:
         self.config = config
-        self.fetcher = DataFetcher(timeout=config.api_timeout_seconds)
+        self.fetcher = DataFetcher(
+            timeout=config.api_timeout_seconds,
+            timezone_name=config.timezone,
+            myhsal_school_slug=config.myhsal.school_slug,
+        )
         self.output = create_output(config)
         self.renderer = ScoreRenderer(
             width=self.output.width,
@@ -134,7 +138,9 @@ class ScoreDisplayApp:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="NHL/NFL/MLB LED score display")
+    parser = argparse.ArgumentParser(
+        description="NHL/NFL/MLB/MYHSAL LED score display"
+    )
     parser.add_argument("--config", default="config.json", help="Path to JSON config")
     parser.add_argument(
         "--output",

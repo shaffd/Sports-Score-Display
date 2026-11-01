@@ -9,6 +9,7 @@ from typing import Any, Iterable
 import requests
 
 from models import FetchBatch, Game, Team
+from myhsal import MyhsalClient
 
 
 LOGGER = logging.getLogger(__name__)
@@ -28,6 +29,9 @@ class DataFetcher:
         self,
         timeout: float = 10.0,
         session: requests.Session | None = None,
+        *,
+        timezone_name: str = "America/New_York",
+        myhsal_school_slug: str = "tabc",
     ) -> None:
         self.timeout = timeout
         self.session = session or requests.Session()
@@ -36,6 +40,12 @@ class DataFetcher:
                 "Accept": "application/json",
                 "User-Agent": "Sports-Score-Display/1.0",
             }
+        )
+        self.myhsal = MyhsalClient(
+            myhsal_school_slug,
+            timezone_name=timezone_name,
+            timeout=timeout,
+            session=self.session,
         )
 
     def fetch_games(
@@ -50,6 +60,7 @@ class DataFetcher:
             "NHL": self.get_nhl_games,
             "NFL": self.get_nfl_games,
             "MLB": self.get_mlb_games,
+            "MYHSAL": self.get_myhsal_games,
         }
 
         for sport in sports:
@@ -60,6 +71,10 @@ class DataFetcher:
                 batch.errors[sport] = str(exc)
 
         return batch
+
+    def get_myhsal_games(self, _start_date: date, _end_date: date) -> list[Game]:
+        """MYHSAL team pages already contain the complete current season."""
+        return self.myhsal.get_games()
 
     def _get_json(self, url: str, params: dict[str, Any] | None = None) -> dict:
         response = self.session.get(url, params=params, timeout=self.timeout)

@@ -67,6 +67,30 @@ class DisplayUtilsTests(unittest.TestCase):
             ["header:NHL", "NHL:nhl", "header:MLB", "MLB:mlb"],
         )
 
+    def test_myhsal_uses_three_day_seven_day_window_and_one_title(self):
+        games = [
+            make_game("too-old", self.now - timedelta(days=4), "final"),
+            make_game("old", self.now - timedelta(days=3, minutes=1), "final"),
+            make_game("recent", self.now - timedelta(days=2), "final"),
+            make_game("soon", self.now + timedelta(days=6)),
+            make_game("far", self.now + timedelta(days=8)),
+        ]
+        for game in games:
+            game.sport = "MYHSAL"
+        config = AppConfig(sports=("MYHSAL",))
+
+        cards = build_cards(games, config, self.now)
+
+        self.assertEqual(
+            [card.key for card in cards],
+            [
+                "header:MYHSAL - TABC",
+                "MYHSAL:old",
+                "MYHSAL:recent",
+                "MYHSAL:soon",
+            ],
+        )
+
     def test_live_favorite_games_use_extended_dwell(self):
         config = AppConfig(
             card_seconds=5,

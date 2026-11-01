@@ -23,6 +23,8 @@ def format_status(game: Game, zone: ZoneInfo) -> str:
         return f"FINAL {local_date}"
     if game.status == "live":
         return "IN PROGRESS"
+    if game.scheduled_label:
+        return game.scheduled_label
     return format_start_time(game.start_time_utc, zone)
 
 
@@ -54,13 +56,26 @@ def select_games(
     games: list[Game],
     now: datetime,
     lookback_hours: int = 24,
+    myhsal_past_days: int = 3,
+    myhsal_upcoming_days: int = 7,
 ) -> list[Game]:
     """Keep recent/upcoming games; always retain a currently live game."""
     start, end = display_window(now, lookback_hours)
     selected: list[Game] = []
     for game in games:
         local_start = game.start_time_utc.astimezone(now.tzinfo)
-        if game.status == "live" or start <= local_start < end:
+        if game.sport == "MYHSAL":
+            today = now.date()
+            game_day = local_start.date()
+            if game.status == "final":
+                keep = today - timedelta(days=myhsal_past_days) <= game_day <= today
+            else:
+                keep = today <= game_day <= today + timedelta(
+                    days=myhsal_upcoming_days
+                )
+        else:
+            keep = start <= local_start < end
+        if game.status == "live" or keep:
             selected.append(game)
     return selected
 
@@ -73,18 +88,29 @@ def build_cards(
 ) -> list[DisplayCard]:
     """Group selected games by configured sport order and add optional headers."""
     current = now or datetime.now(config.zone)
-    selected = select_games(games, current, config.lookback_hours)
+    selected = select_games(
+        games,
+        current,
+        config.lookback_hours,
+        config.myhsal.past_days,
+        config.myhsal.upcoming_days,
+    )
     cards: list[DisplayCard] = []
 
     for sport in config.sports:
         sport_games = sorted(
             (game for game in selected if game.sport == sport),
-            key=lambda game: game.start_time_utc,
+            key=(
+                (lambda game: (game.status != "final", game.start_time_utc))
+                if sport == "MYHSAL"
+                else (lambda game: game.start_time_utc)
+            ),
         )
         if not sport_games:
             continue
         if config.show_sport_headers:
-            cards.append(DisplayCard(type="header", title=sport))
+            title = config.myhsal.title if sport == "MYHSAL" else sport
+            cards.append(DisplayCard(type="header", title=title))
         cards.extend(DisplayCard(type="game", game=game) for game in sport_games)
 
     if not cards:

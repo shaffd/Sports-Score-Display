@@ -1,13 +1,20 @@
 # Sports Score Display
 
-A configurable Python scoreboard for NHL, NFL, and MLB games. The application
-fetches recent and upcoming games, renders small Pillow images, and sends those
-images either to a Tkinter development preview or an HZeller HUB75 LED matrix.
+A configurable Python scoreboard for NHL, NFL, MLB, and a selected MYHSAL
+school. The application fetches recent and upcoming games, renders small Pillow
+images, and sends those images either to a Tkinter development preview or an
+HZeller HUB75 LED matrix.
 
 ## What it displays
 
 - Games whose scheduled start was within the previous 24 hours.
 - Games scheduled within the next 24 hours.
+- For MYHSAL TABC, results from the previous three calendar days and games in
+  the next seven calendar days.
+- One `MYHSAL - TABC` title card followed by every TABC sport in chronological
+  order, with result cards before upcoming cards.
+- MYHSAL division labels such as `Varsity Hockey` and `JV Basketball` on the
+  bottom of each game card.
 - Live scores refreshed independently from the card rotation interval.
 - Centered NHL, NFL, and MLB league marks on the league title cards.
 - Live Yankees, Rangers, and Lions games dwell for three minutes on each pass;
@@ -34,7 +41,7 @@ APIs do not expose a consistent game-finished timestamp.
 ## Architecture
 
 ```text
-Sports APIs -> data_fetcher.py -> normalized Game objects
+Sports APIs / MYHSAL HTML -> data_fetcher.py -> normalized Game objects
             -> display_utils.py -> rotating DisplayCard list
             -> renderer.py      -> Pillow RGB frame
             -> outputs.py       -> Tkinter preview or HZeller rgbmatrix
@@ -45,6 +52,7 @@ Important files:
 - `config.py`: loads and validates `config.json`.
 - `models.py`: shared `Team`, `Game`, and `DisplayCard` dataclasses.
 - `data_fetcher.py`: league API clients and normalization.
+- `myhsal.py`: MYHSAL division discovery and team-page parsing.
 - `display_utils.py`: 24-hour/current-day selection and status text.
 - `renderer.py`: integer-region, pixel-sharp Pillow layout.
 - `outputs.py`: optional preview and physical matrix adapters.
@@ -172,6 +180,13 @@ separate so a laptop preview can model any future display.
     "NHL": ["NYR"],
     "NFL": ["DET"]
   },
+  "sports": ["NHL", "NFL", "MLB", "MYHSAL"],
+  "myhsal": {
+    "school_slug": "tabc",
+    "school_name": "TABC",
+    "past_days": 3,
+    "upcoming_days": 7
+  },
   "output": "preview",
   "canvas": {"width": 64, "height": 32},
   "matrix": {
@@ -184,6 +199,11 @@ separate so a laptop preview can model any future display.
   }
 }
 ```
+
+Include `"MYHSAL"` in `sports` to enable the school source. `school_slug` is
+the final path component used by the school's MYHSAL team pages. Division
+discovery is cached for the life of the process, and game pages are cached for
+five minutes to avoid placing unnecessary load on the league site.
 
 For a different panel, update `rows`, `cols`, `chain_length`, and `parallel`.
 The matrix adapter reports the actual canvas dimensions from HZeller and the
@@ -209,6 +229,7 @@ Add transparent PNGs using uppercase team abbreviations:
 Logos/MLB/NYY.png
 Logos/NFL/DET.png
 Logos/NHL/NYR.png
+Logos/MYHSAL/TABC.png
 ```
 
 The renderer trims transparent source padding, scales with nearest-neighbor
@@ -221,6 +242,14 @@ League title-card marks are stored in `Logos/LEAGUES/`. They are centered on the
 full canvas, preserve their source proportions, and fit within 60x28 pixels at
 the reference 64x32 resolution. If a league mark is missing, the original text
 title is shown as a fallback.
+
+The checked-in `Logos/MYHSAL/` directory contains the official site-provided
+logos for every team in TABC's discovered divisions. Refresh this set after a
+league or school change with:
+
+```bash
+python tools/download_myhsal_logos.py
+```
 
 ## 64x32 pixel layout
 

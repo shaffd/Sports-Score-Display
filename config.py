@@ -8,7 +8,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
-SUPPORTED_SPORTS = ("NHL", "NFL", "MLB")
+SUPPORTED_SPORTS = ("NHL", "NFL", "MLB", "MYHSAL")
 DEFAULT_FAVORITE_TEAMS = (
     ("MLB", "NYY"),
     ("NHL", "NYR"),
@@ -30,6 +30,18 @@ class CanvasConfig:
 class AssetConfig:
     logo_directory: Path = Path("Logos")
     font_path: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MyhsalConfig:
+    school_slug: str = "tabc"
+    school_name: str = "TABC"
+    past_days: int = 3
+    upcoming_days: int = 7
+
+    @property
+    def title(self) -> str:
+        return f"MYHSAL - {self.school_name.upper()}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +81,7 @@ class AppConfig:
     preview_scale: int = 8
     canvas: CanvasConfig = CanvasConfig()
     assets: AssetConfig = AssetConfig()
+    myhsal: MyhsalConfig = MyhsalConfig()
     matrix: MatrixConfig = MatrixConfig()
 
     @property
@@ -121,6 +134,7 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
     canvas_raw = raw.get("canvas", {})
     assets_raw = raw.get("assets", {})
     matrix_raw = raw.get("matrix", {})
+    myhsal_raw = raw.get("myhsal", {})
 
     canvas = CanvasConfig(
         width=int(canvas_raw.get("width", 64)),
@@ -153,6 +167,12 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         show_refresh_rate=bool(matrix_raw.get("show_refresh_rate", False)),
         drop_privileges=bool(matrix_raw.get("drop_privileges", True)),
     )
+    myhsal = MyhsalConfig(
+        school_slug=str(myhsal_raw.get("school_slug", "tabc")).strip().lower(),
+        school_name=str(myhsal_raw.get("school_name", "TABC")).strip(),
+        past_days=int(myhsal_raw.get("past_days", 3)),
+        upcoming_days=int(myhsal_raw.get("upcoming_days", 7)),
+    )
 
     sports = tuple(str(sport).upper() for sport in raw.get("sports", SUPPORTED_SPORTS))
     unsupported = sorted(set(sports) - set(SUPPORTED_SPORTS))
@@ -183,6 +203,7 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         preview_scale=int(raw.get("preview_scale", 8)),
         canvas=canvas,
         assets=assets,
+        myhsal=myhsal,
         matrix=matrix,
     )
 
@@ -209,10 +230,16 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
         ("matrix.cols", config.matrix.cols),
         ("matrix.chain_length", config.matrix.chain_length),
         ("matrix.parallel", config.matrix.parallel),
+        ("myhsal.past_days", config.myhsal.past_days),
+        ("myhsal.upcoming_days", config.myhsal.upcoming_days),
     ):
         _positive(name, value)
 
     if not 1 <= config.matrix.brightness <= 100:
         raise ConfigError("matrix.brightness must be between 1 and 100")
+    if not config.myhsal.school_slug:
+        raise ConfigError("myhsal.school_slug must not be empty")
+    if not config.myhsal.school_name:
+        raise ConfigError("myhsal.school_name must not be empty")
 
     return config
